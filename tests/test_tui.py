@@ -40,6 +40,7 @@ class VersionSwitchTest(unittest.TestCase):
         self.assertEqual(self.app.focus, FOCUS_TEXT)
         self.assertTrue(self.app.verses[self.app.verse_cursor].text.startswith("For God so loved the world"))
         self.assertEqual(self.changes, ["ASV"])
+        self.assertEqual(self.app.message, "switched to American Standard Version of 1901")
 
     def test_verse_missing_from_target_lands_on_previous_verse(self) -> None:
         self.go_to("Matthew", 17, 21)

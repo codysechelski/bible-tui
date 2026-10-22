@@ -28,12 +28,6 @@ class BibleVersion:
     path: Path
     metadata: dict[str, str] = field(default_factory=dict, compare=False, hash=False)
 
-    @property
-    def label(self) -> str:
-        if self.name and self.name.casefold() != self.abbreviation.casefold():
-            return f"{self.abbreviation} · {self.name}"
-        return self.abbreviation
-
     def matches(self, query: str) -> bool:
         folded = query.casefold()
         return folded in (

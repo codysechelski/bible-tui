@@ -67,8 +67,8 @@ without any verses is skipped.
 
 | Key | Used for | Fallback |
 | --- | --- | --- |
-| `version` | Short abbreviation shown in the status bar and used to select the version (`KJV`) | File name, upper-cased, with a leading `bible_` removed (`bible_web.sqlite` becomes `WEB`) |
-| `version_name` | Full name shown in the title bar and version picker | The abbreviation |
+| `version` | Short abbreviation (`KJV`, `ASV`) used to pick a version on the command line, in `default_version`, and in `state.json`, and to tell versions apart | File name, upper-cased, with a leading `bible_` removed (`bible_web.sqlite` becomes `WEB`) |
+| `version_name` | Full name (`King James Version`) shown everywhere in the TUI: title bar, status bar, version picker, and messages | The abbreviation |
 
 Other metadata keys are ignored.
 

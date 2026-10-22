@@ -485,7 +485,7 @@ class BibleTui:
             store = BibleStore(version.path)
             books = store.books(self.alphabetical)
         except sqlite3.Error as error:
-            self.message = f"could not open {version.abbreviation}: {error}"
+            self.message = f"could not open {version.name}: {error}"
             return
 
         position = self.current_position()
@@ -501,12 +501,12 @@ class BibleTui:
         self.restore_position(position)
         self.focus = focus if self.verses or focus != FOCUS_TEXT else FOCUS_BOOKS
         self.ensure_visible()
-        self.message = f"switched to {version.abbreviation}"
+        self.message = f"switched to {version.name}"
         if self.on_version_change is not None:
             try:
                 self.on_version_change(version)
             except OSError:
-                self.message = f"switched to {version.abbreviation} (could not save state)"
+                self.message = f"switched to {version.name} (could not save state)"
 
     def current_position(self) -> tuple[int | None, int | None, int | None]:
         """The current place as (book sort order, chapter, verse), which carries across versions."""
@@ -1266,7 +1266,7 @@ class BibleTui:
 
     def draw_top_bar(self, y: int, width: int) -> None:
         order = "A-Z" if self.alphabetical else "Bible order"
-        title = f" Bible TUI | {self.version.label} | {order} "
+        title = f" Bible TUI | {self.version.name} | {order} "
         self.add_screen_line(y, title, width)
 
     def draw_books(self, y: int, x: int, h: int, w: int) -> None:
@@ -1340,16 +1340,21 @@ class BibleTui:
         if self.search_scope is not None:
             self.draw_search_line(y, width)
             return
-        version = self.version.abbreviation
+        version = self.version.name
         location = self.location_label()
         focus = ("books", "chapters", "text")[self.focus]
         status = f" {version} | {location} | focus: {focus} "
         if self.message:
             status = f"{status}| {self.message} "
+        visual = "-- VISUAL --"
+        hint_width = len("ctrl+p commands")
+        # Keep the status text clear of the right-aligned visual marker and command hint.
+        reserved = hint_width + 2 + (len(visual) + 1 if self.visual_mode else 0)
+        available = max(0, width - 1 - reserved)
+        if len(status) > available:
+            status = status[: max(0, available - 4)] + "... "
         self.add_screen_line(y, status, width, curses.color_pair(4) | curses.A_DIM)
         if self.visual_mode and width > 14:
-            visual = "-- VISUAL --"
-            hint_width = len("ctrl+p commands")
             visual_x = max(0, width - hint_width - len(visual) - 3)
             self.stdscr.addnstr(y, visual_x, visual, len(visual), curses.color_pair(7) | curses.A_BOLD)
         self.draw_command_hint(y, width)
@@ -1495,8 +1500,7 @@ class BibleTui:
 
     def draw_version_modal(self, height: int, width: int) -> None:
         visible_rows = self.version_visible_rows()
-        abbr_w = max(len(version.abbreviation) for version in self.versions)
-        content_w = max(len(f"{version.abbreviation}  {version.name}") for version in self.versions)
+        content_w = max(len(version.name) for version in self.versions)
         modal_w = min(max(40, content_w + 10), max(20, width - 4))
         modal_h = visible_rows + 2
         y = max(1, (height - modal_h) // 2)
@@ -1520,15 +1524,12 @@ class BibleTui:
             index = self.version_scroll + row
             selected = index == self.version_cursor
             row_attr = curses.color_pair(1) if selected else 0
-            abbr_attr = row_attr if selected else curses.color_pair(3) | curses.A_BOLD
+            marker_attr = row_attr if selected else curses.color_pair(3) | curses.A_BOLD
             name_attr = row_attr if selected else curses.color_pair(2)
             marker = "*" if version == self.version else " "
             win.addnstr(row + 1, 1, " " * inner_w, inner_w, row_attr)
-            win.addnstr(row + 1, 2, marker, 1, abbr_attr)
-            win.addnstr(row + 1, 4, version.abbreviation.ljust(abbr_w), abbr_w, abbr_attr)
-            name_x = 4 + abbr_w + 2
-            if version.name != version.abbreviation:
-                win.addnstr(row + 1, name_x, version.name, max(0, modal_w - name_x - 2), name_attr)
+            win.addnstr(row + 1, 2, marker, 1, marker_attr)
+            win.addnstr(row + 1, 4, version.name, max(0, modal_w - 6), name_attr)
         self.draw_scrollbar(win, len(self.versions), self.version_scroll, visible_rows)
 
     def draw_fuzzy_finder(self, height: int, width: int) -> None:

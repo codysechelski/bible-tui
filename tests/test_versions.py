@@ -18,11 +18,10 @@ class InspectTest(unittest.TestCase):
     def test_reads_metadata(self) -> None:
         version = inspect_database(make_bible(self.tmp / "x.sqlite", "WEB", "World English Bible"))
         self.assertEqual((version.abbreviation, version.name), ("WEB", "World English Bible"))
-        self.assertEqual(version.label, "WEB · World English Bible")
 
     def test_falls_back_to_filename_without_metadata(self) -> None:
         version = inspect_database(make_bible(self.tmp / "bible_web.sqlite", None, None))
-        self.assertEqual((version.abbreviation, version.name, version.label), ("WEB", "WEB", "WEB"))
+        self.assertEqual((version.abbreviation, version.name), ("WEB", "WEB"))
 
     def test_rejects_unusable_files(self) -> None:
         junk = self.tmp / "junk.sqlite"
@@ -49,6 +48,10 @@ class DiscoveryTest(unittest.TestCase):
     def test_bundled_versions(self) -> None:
         discovery = discover_versions([BUNDLED_BIBLES_DIR])
         self.assertEqual([v.abbreviation for v in discovery.versions], ["ASV", "KJV"])
+        self.assertEqual(
+            [v.name for v in discovery.versions],
+            ["American Standard Version of 1901", "King James Version"],
+        )
         self.assertEqual(discovery.skipped, ())
 
     def test_earlier_directory_shadows_later_one(self) -> None:

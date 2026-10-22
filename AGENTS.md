@@ -46,7 +46,9 @@ disabled.
 - Python standard library only; keep Python 3.9 compatibility (`from __future__ import annotations` in every
   module).
 - Nothing may assume a particular version. Version names come from database metadata (`version`,
-  `version_name`) with a filename fallback. Never hardcode a version abbreviation or file name outside tests and
+  `version_name`) with a filename fallback. The TUI always shows the full `version_name`. The `version`
+  abbreviation is for identifying versions (CLI argument, `default_version`, `state.json`, shadowing) and for
+  `--list-versions`. Never hardcode a version abbreviation or file name outside tests and
   the docs for the bundled versions.
 - Databases are always opened read-only (`connect_read_only`). Never write to a Bible database.
 - Versions can differ in verse coverage (the ASV omits 16 verses) and may be partial. Cross-version positions
