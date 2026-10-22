@@ -5,7 +5,23 @@ import unittest
 from pathlib import Path
 
 from bible_tui.store import BibleStore
-from bible_tui.tui import FOCUS_TEXT, BibleTui, build_fuzzy_matches, match_spans, parse_fuzzy_query
+import curses
+
+from bible_tui.tui import (
+    FOCUS_BOOKS,
+    FOCUS_CHAPTERS,
+    FOCUS_TEXT,
+    KEY_CTRL_D,
+    KEY_CTRL_F,
+    KEY_CTRL_S,
+    KEY_CTRL_U,
+    KEY_TAB,
+    BibleTui,
+    build_fuzzy_matches,
+    match_spans,
+    parse_fuzzy_query,
+    word_spans,
+)
 from bible_tui.versions import discover_versions, find_version, inspect_database
 
 from tests.helpers import ASV_PATH, KJV_PATH, FakeScreen, make_bible
@@ -80,6 +96,128 @@ class VersionSwitchTest(unittest.TestCase):
         self.app.handle_key(10)
         self.assertFalse(self.app.version_modal_open)
         self.assertEqual(self.app.version, self.asv)
+
+
+class KeybindingTest(unittest.TestCase):
+    def setUp(self) -> None:
+        versions = discover_versions([KJV_PATH.parent]).versions
+        self.app = BibleTui(FakeScreen(), BibleStore(KJV_PATH), find_version(versions, "KJV"), versions)
+
+    def tearDown(self) -> None:
+        self.app.store.close()
+
+    def press(self, *keys: object) -> None:
+        for key in keys:
+            self.app.handle_key(ord(key) if isinstance(key, str) else key)
+
+    def go_to(self, book_name: str, chapter: int, verse: int) -> None:
+        book = next(book for book in self.app.books if book.name == book_name)
+        self.app.jump_to_reference(book, chapter, verse)
+
+    def cursor_word(self) -> str:
+        text = self.app.verses[self.app.verse_cursor].text
+        col = self.app.text_cursor_col
+        return next(text[start:end] for start, end in word_spans(text) if start <= col < end)
+
+    def test_gg_and_G(self) -> None:
+        self.go_to("Genesis", 1, 10)
+        self.press("G")
+        self.assertEqual(self.app.location_label(), "Genesis 1:31")
+        self.press("g")
+        self.assertEqual(self.app.location_label(), "Genesis 1:31")
+        self.press("g")
+        self.assertEqual(self.app.location_label(), "Genesis 1:1")
+
+    def test_g_then_other_key_does_not_jump(self) -> None:
+        self.go_to("Genesis", 1, 10)
+        self.press("g", "j", "g")
+        self.assertEqual(self.app.location_label(), "Genesis 1:11")
+
+    def test_half_and_full_page(self) -> None:
+        self.go_to("Genesis", 1, 1)
+        self.press(KEY_CTRL_D)
+        half = self.app.verse_cursor
+        self.press(KEY_CTRL_U)
+        self.assertEqual(self.app.verse_cursor, 0)
+        self.press(KEY_CTRL_F)
+        self.assertGreater(self.app.verse_cursor, half)
+        self.assertGreater(half, 0)
+
+    def test_word_motions_cross_verses(self) -> None:
+        self.go_to("Genesis", 1, 1)
+        self.press("w", "w")
+        self.assertEqual(self.cursor_word(), "beginning")
+        self.press("e")
+        self.assertEqual(self.app.text_cursor_col, len("In the beginning") - 1)
+        self.press("$")
+        self.assertEqual(self.cursor_word(), ".")
+        self.press("w")
+        self.assertEqual((self.app.location_label(), self.app.text_cursor_col), ("Genesis 1:2", 0))
+        self.press("b")
+        self.assertEqual((self.app.location_label(), self.cursor_word()), ("Genesis 1:1", "."))
+        self.press("0")
+        self.assertEqual(self.app.text_cursor_col, 0)
+
+    def test_visual_verse_mode_selects_whole_verses(self) -> None:
+        self.go_to("John", 11, 35)
+        self.press("w", "V", "j")
+        self.assertEqual(self.app.selected_text().splitlines()[0], "Jesus wept.")
+        self.assertEqual(len(self.app.selected_text().splitlines()), 2)
+        self.press("v")
+        self.assertTrue(self.app.visual_mode)
+        self.assertFalse(self.app.visual_line)
+        self.press("v")
+        self.assertFalse(self.app.visual_mode)
+
+    def test_chapter_stepping_crosses_books(self) -> None:
+        self.go_to("Genesis", 50, 3)
+        self.press("]")
+        self.assertEqual(self.app.location_label(), "Exodus 1:1")
+        self.press("[")
+        self.assertEqual(self.app.location_label(), "Genesis 50:1")
+        self.press("[")
+        self.assertEqual(self.app.location_label(), "Genesis 49:1")
+        self.go_to("Revelation", 22, 1)
+        self.press("]")
+        self.assertEqual((self.app.location_label(), self.app.message), ("Revelation 22:1", "last chapter"))
+
+    def test_chapter_stepping_uses_bible_order_when_alphabetical(self) -> None:
+        self.app.toggle_book_order()
+        self.go_to("Genesis", 50, 1)
+        self.press("]")
+        self.assertEqual(self.app.location_label(), "Exodus 1:1")
+        self.assertEqual(self.app.books[self.app.book_cursor].name, "Exodus")
+
+    def test_tab_cycles_panes(self) -> None:
+        self.assertEqual(self.app.focus, FOCUS_BOOKS)
+        self.press(KEY_TAB)
+        self.assertEqual(self.app.focus, FOCUS_CHAPTERS)
+        self.press(KEY_TAB)
+        self.assertEqual(self.app.focus, FOCUS_TEXT)
+        self.press(KEY_TAB)
+        self.assertEqual(self.app.focus, FOCUS_BOOKS)
+        self.press(curses.KEY_BTAB)
+        self.assertEqual(self.app.focus, FOCUS_TEXT)
+
+    def test_moving_right_keeps_the_current_place(self) -> None:
+        self.press("]", "]")
+        self.assertEqual(self.app.focus, FOCUS_BOOKS)
+        self.press(KEY_TAB, KEY_TAB)
+        self.assertEqual((self.app.focus, self.app.location_label()), (FOCUS_TEXT, "Genesis 3:1"))
+        self.press("j", "j", curses.KEY_BTAB, "l")
+        self.assertEqual(self.app.location_label(), "Genesis 3:3")
+
+    def test_modal_keys(self) -> None:
+        self.press("?")
+        self.assertTrue(self.app.command_modal_open)
+        self.press("?")
+        self.assertFalse(self.app.command_modal_open)
+        self.press(":")
+        self.assertTrue(self.app.goto_open)
+        self.press(27, KEY_CTRL_S)
+        self.assertTrue(self.app.fuzzy_open)
+        self.press(KEY_CTRL_S)
+        self.assertTrue(self.app.fuzzy_help_open)
 
 
 class SearchFunctionsTest(unittest.TestCase):

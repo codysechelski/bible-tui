@@ -13,20 +13,34 @@ import textwrap
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from bible_tui.marks import MarkError, MarkStore, VerseKey
 from bible_tui.store import BOOK_ABBREVIATIONS, BibleStore, BibleVerse, Book, Verse
 from bible_tui.versions import BibleVersion
 
 FOCUS_BOOKS = 0
 FOCUS_CHAPTERS = 1
 FOCUS_TEXT = 2
-KEY_CTRL_P = 16
+KEY_CTRL_B = 2
+KEY_CTRL_D = 4
 KEY_CTRL_F = 6
 KEY_CTRL_G = 7
 KEY_CTRL_N = 14
+KEY_CTRL_P = 16
 KEY_CTRL_S = 19
+KEY_CTRL_U = 21
+KEY_TAB = 9
 PAIR_SEARCH = 8
 PAIR_ERROR = 9
 PAIR_HEADING = 10
+PAIR_SIGN = 11
+PAIR_SIGN_SELECTED = 12
+
+# The text pane gutter: a sign column (like Vim's signcolumn=yes), then the verse number.
+SIGN_WIDTH = 2
+NUMBER_WIDTH = 4
+GUTTER_WIDTH = SIGN_WIDTH + NUMBER_WIDTH
+MARK_SIGN_NERD_FONT = "\uf02e"  # nf-fa-bookmark, present in Nerd Fonts v2 and v3
+MARK_SIGN_PLAIN = "\u25cf"  # ● renders in practically every font
 
 
 @dataclass(frozen=True)
@@ -66,18 +80,34 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
             Command("move down", "j / down", "move_down"),
             Command("move left", "h / left", "move_left"),
             Command("move right", "l / right", "move_right"),
-            Command("page up", "page up", "page_up"),
-            Command("page down", "page down", "page_down"),
-            Command("first item", "home", "home"),
-            Command("last item", "end", "end"),
+            Command("next pane", "tab", "next_pane"),
+            Command("previous pane", "shift+tab", "previous_pane"),
+            Command("next chapter", "]", "next_chapter"),
+            Command("previous chapter", "[", "previous_chapter"),
+            Command("half page up", "ctrl+u", "half_page_up"),
+            Command("half page down", "ctrl+d", "half_page_down"),
+            Command("page up", "page up / ctrl+b", "page_up"),
+            Command("page down", "page down / ctrl+f", "page_down"),
+            Command("first item", "home / gg", "home"),
+            Command("last item", "end / G", "end"),
+        ),
+    ),
+    (
+        "Text",
+        (
+            Command("start of verse", "0", "start_of_verse"),
+            Command("end of verse", "$", "end_of_verse"),
+            Command("next word", "w", "next_word"),
+            Command("previous word", "b", "previous_word"),
+            Command("end of word", "e", "end_of_word"),
         ),
     ),
     (
         "Search",
         (
             Command("search", "/", "search"),
-            Command("fuzzy find", "ctrl+f", "fuzzy_find"),
-            Command("go to reference", "ctrl+g", "go_to_reference"),
+            Command("fuzzy find", "ctrl+s", "fuzzy_find"),
+            Command("go to reference", "ctrl+g / :", "go_to_reference"),
             Command("next match", "n", "next_match"),
             Command("previous match", "N", "previous_match"),
         ),
@@ -87,8 +117,10 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
         (
             Command("select", "enter", "select"),
             Command("visual mode", "v", "visual_mode"),
+            Command("visual verse mode", "V", "visual_line_mode"),
             Command("yank selection", "y", "yank_selection"),
             Command("yank verse", "yy", "yank_verse"),
+            Command("toggle mark", "m", "toggle_mark"),
         ),
     ),
     (
@@ -100,9 +132,20 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
     ),
     (
         "General",
-        (Command("quit", "q", "quit"),),
+        (
+            Command("commands", "ctrl+p / ?", "commands"),
+            Command("quit", "q", "quit"),
+        ),
     ),
 )
+
+TEXT_MOTIONS: dict[str, str] = {
+    "start_of_verse": "0",
+    "end_of_verse": "$",
+    "next_word": "w",
+    "previous_word": "b",
+    "end_of_word": "e",
+}
 
 COMMANDS: tuple[Command, ...] = tuple(
     command for _, commands in COMMAND_GROUPS for command in commands
@@ -153,12 +196,16 @@ class BibleTui:
         *,
         alphabetical: bool = False,
         on_version_change: Callable[[BibleVersion], None] | None = None,
+        marks: MarkStore | None = None,
+        nerd_font: bool = False,
     ) -> None:
         self.stdscr = stdscr
         self.store = store
         self.version = version
         self.versions: tuple[BibleVersion, ...] = tuple(versions) or (version,)
         self.on_version_change = on_version_change
+        self.marks = marks if marks is not None else MarkStore(None)
+        self.mark_sign = MARK_SIGN_NERD_FONT if nerd_font else MARK_SIGN_PLAIN
         self.version_modal_open = False
         self.version_cursor = 0
         self.version_scroll = 0
@@ -181,8 +228,10 @@ class BibleTui:
         self.verse_cursor = 0
         self.text_cursor_col = 0
         self.visual_mode = False
+        self.visual_line = False
         self.visual_anchor: tuple[int, int] | None = None
         self.pending_y = False
+        self.pending_g = False
         self.message = ""
         self.command_modal_open = False
         self.command_cursor = 0
@@ -224,6 +273,8 @@ class BibleTui:
             curses.init_pair(PAIR_SEARCH, curses.COLOR_YELLOW, -1)
         curses.init_pair(PAIR_ERROR, curses.COLOR_RED, -1)
         curses.init_pair(PAIR_HEADING, curses.COLOR_BLUE, -1)
+        curses.init_pair(PAIR_SIGN, curses.COLOR_BLUE, -1)
+        curses.init_pair(PAIR_SIGN_SELECTED, curses.COLOR_BLUE, curses.COLOR_WHITE)
         try:
             curses.set_escdelay(25)
         except AttributeError:
@@ -256,13 +307,15 @@ class BibleTui:
         if self.search_input_active:
             self.handle_search_input_key(key)
             return True
-        if key == KEY_CTRL_P:
+        pending_g = self.pending_g
+        self.pending_g = False
+        if key in (KEY_CTRL_P, ord("?")):
             self.open_command_modal()
             return True
-        if key == KEY_CTRL_F:
+        if key == KEY_CTRL_S:
             self.open_fuzzy_finder()
             return True
-        if key == KEY_CTRL_G:
+        if key in (KEY_CTRL_G, ord(":")):
             self.open_goto_modal()
             return True
         if key == 27:
@@ -290,16 +343,36 @@ class BibleTui:
         if key == ord("t"):
             self.open_version_modal()
             return True
-        if key == ord("v") and self.focus == FOCUS_TEXT and self.verses:
+        if key in (ord("v"), ord("V")) and self.focus == FOCUS_TEXT and self.verses:
             self.pending_y = False
-            self.enter_visual_mode()
+            self.toggle_visual_mode(line=key == ord("V"))
             return True
         if key == ord("y") and self.focus == FOCUS_TEXT and self.verses:
             self.handle_yank_key()
             return True
+        if key == ord("m"):
+            self.pending_y = False
+            self.toggle_mark()
+            return True
         if key in (ord("h"), ord("l")) and self.focus == FOCUS_TEXT and self.verses:
             self.pending_y = False
             self.move_text_cursor(-1 if key == ord("h") else 1)
+            return True
+        if key in (ord("0"), ord("$")) and self.focus == FOCUS_TEXT and self.verses:
+            self.pending_y = False
+            self.move_to_verse_edge(key == ord("$"))
+            return True
+        if key in (ord("w"), ord("b"), ord("e")) and self.focus == FOCUS_TEXT and self.verses:
+            self.pending_y = False
+            self.move_word(chr(key))
+            return True
+        if key in (ord("]"), ord("[")):
+            self.pending_y = False
+            self.step_chapter(1 if key == ord("]") else -1)
+            return True
+        if key in (KEY_TAB, curses.KEY_BTAB):
+            self.pending_y = False
+            self.cycle_focus(1 if key == KEY_TAB else -1)
             return True
         if key == curses.KEY_LEFT:
             self.pending_y = False
@@ -328,19 +401,27 @@ class BibleTui:
             self.pending_y = False
             self.move_vertical(1)
             return True
-        if key == curses.KEY_PPAGE:
+        if key in (curses.KEY_PPAGE, KEY_CTRL_B):
             self.pending_y = False
             self.page(-1)
             return True
-        if key == curses.KEY_NPAGE:
+        if key in (curses.KEY_NPAGE, KEY_CTRL_F):
             self.pending_y = False
             self.page(1)
             return True
-        if key == curses.KEY_HOME:
+        if key in (KEY_CTRL_U, KEY_CTRL_D):
+            self.pending_y = False
+            self.page(-1 if key == KEY_CTRL_U else 1, half=True)
+            return True
+        if key == curses.KEY_HOME or (key == ord("g") and pending_g):
             self.pending_y = False
             self.home()
             return True
-        if key == curses.KEY_END:
+        if key == ord("g"):
+            self.pending_y = False
+            self.pending_g = True
+            return True
+        if key in (curses.KEY_END, ord("G")):
             self.pending_y = False
             self.end()
             return True
@@ -348,7 +429,7 @@ class BibleTui:
         return True
 
     def handle_command_modal_key(self, key: int) -> bool:
-        if key == 27:
+        if key in (27, ord("?")):
             self.close_command_modal()
             return True
         if key in (curses.KEY_UP, ord("k")):
@@ -396,6 +477,30 @@ class BibleTui:
             self.page(-1)
         elif action == "page_down":
             self.page(1)
+        elif action == "half_page_up":
+            self.page(-1, half=True)
+        elif action == "half_page_down":
+            self.page(1, half=True)
+        elif action == "next_pane":
+            self.cycle_focus(1)
+        elif action == "previous_pane":
+            self.cycle_focus(-1)
+        elif action == "next_chapter":
+            self.step_chapter(1)
+        elif action == "previous_chapter":
+            self.step_chapter(-1)
+        elif action in TEXT_MOTIONS:
+            if self.focus == FOCUS_TEXT and self.verses:
+                if action in ("start_of_verse", "end_of_verse"):
+                    self.move_to_verse_edge(action == "end_of_verse")
+                else:
+                    self.move_word(TEXT_MOTIONS[action])
+            else:
+                self.message = "select text to move the cursor"
+        elif action == "commands":
+            self.open_command_modal()
+        elif action == "toggle_mark":
+            self.toggle_mark()
         elif action == "home":
             self.home()
         elif action == "end":
@@ -404,9 +509,9 @@ class BibleTui:
             self.toggle_book_order()
         elif action == "switch_version":
             self.open_version_modal()
-        elif action == "visual_mode":
+        elif action in ("visual_mode", "visual_line_mode"):
             if self.focus == FOCUS_TEXT and self.verses:
-                self.enter_visual_mode()
+                self.toggle_visual_mode(line=action == "visual_line_mode")
             else:
                 self.message = "select text to use visual mode"
         elif action == "yank_selection":
@@ -854,12 +959,21 @@ class BibleTui:
         ):
             self.clear_search()
         if self.focus == FOCUS_BOOKS and self.books:
-            self.select_book(self.book_cursor)
+            self.ensure_cursor_book_selected()
             self.focus = FOCUS_CHAPTERS
         elif self.focus == FOCUS_CHAPTERS and self.chapters:
-            self.select_chapter(self.chapter_cursor)
+            self.ensure_cursor_chapter_selected()
             self.focus = FOCUS_TEXT
         self.ensure_visible()
+
+    def ensure_cursor_book_selected(self) -> None:
+        # Re-selecting the book already shown would reset the chapter and verse.
+        if self.selected_book is None or self.selected_book.id != self.books[self.book_cursor].id:
+            self.select_book(self.book_cursor)
+
+    def ensure_cursor_chapter_selected(self) -> None:
+        if self.selected_chapter != self.chapters[self.chapter_cursor]:
+            self.select_chapter(self.chapter_cursor)
 
     def move_focus_left(self) -> None:
         self.focus = max(FOCUS_BOOKS, self.focus - 1)
@@ -868,11 +982,11 @@ class BibleTui:
     def move_focus_right(self) -> None:
         if self.focus == FOCUS_BOOKS:
             if self.books:
-                self.select_book(self.book_cursor)
+                self.ensure_cursor_book_selected()
             self.focus = FOCUS_CHAPTERS
         elif self.focus == FOCUS_CHAPTERS:
             if self.chapters:
-                self.select_chapter(self.chapter_cursor)
+                self.ensure_cursor_chapter_selected()
             self.focus = FOCUS_TEXT
         self.ensure_visible()
 
@@ -1050,13 +1164,50 @@ class BibleTui:
         self.pending_y = True
         self.message = "y: press y again to yank verse"
 
-    def enter_visual_mode(self) -> None:
+    def verse_key(self, verse_index: int) -> VerseKey | None:
+        if self.selected_book is None or self.selected_chapter is None:
+            return None
+        return (self.selected_book.sort_order, self.selected_chapter, self.verses[verse_index].number)
+
+    def toggle_mark(self) -> None:
+        """Mark or unmark the current verse, or every verse in the visual selection."""
+        if self.focus != FOCUS_TEXT or not self.verses:
+            self.message = "select a verse to mark"
+            return
+        selection = self.visual_selection_bounds()
+        indexes = range(selection[0][0], selection[1][0] + 1) if selection else [self.verse_cursor]
+        keys = [key for key in (self.verse_key(index) for index in indexes) if key is not None]
+        try:
+            marked = self.marks.toggle(keys)
+        except (MarkError, OSError) as error:
+            self.message = f"marks not saved: {error}"
+            return
+        finally:
+            self.exit_visual_mode()
+        action = "marked" if marked else "unmarked"
+        if len(keys) == 1:
+            self.message = f"{action} {self.selected_book.name} {self.selected_chapter}:{keys[0][2]}"
+        else:
+            self.message = f"{action} {len(keys)} verses"
+
+    def enter_visual_mode(self, line: bool = False) -> None:
         self.visual_mode = True
+        self.visual_line = line
         self.visual_anchor = (self.verse_cursor, self.text_cursor_col)
         self.message = ""
 
+    def toggle_visual_mode(self, line: bool) -> None:
+        """Vim behaviour: the same key leaves visual mode, the other key switches kind."""
+        if not self.visual_mode:
+            self.enter_visual_mode(line)
+        elif self.visual_line == line:
+            self.exit_visual_mode()
+        else:
+            self.visual_line = line
+
     def exit_visual_mode(self) -> None:
         self.visual_mode = False
+        self.visual_line = False
         self.visual_anchor = None
 
     def yank_to_clipboard(self, text: str, label: str) -> None:
@@ -1070,6 +1221,74 @@ class BibleTui:
             return
         max_col = max(0, len(self.verses[self.verse_cursor].text) - 1)
         self.text_cursor_col = clamp(self.text_cursor_col + delta, 0, max_col)
+        self.ensure_visible()
+
+    def move_to_verse_edge(self, end: bool) -> None:
+        if not self.verses:
+            return
+        self.text_cursor_col = max(0, len(self.verses[self.verse_cursor].text) - 1) if end else 0
+        self.ensure_visible()
+
+    def move_word(self, motion: str) -> None:
+        """Vim ``w``/``b``/``e``: move by word, continuing into the next or previous verse."""
+        if not self.verses:
+            return
+        col = self.text_cursor_col
+        spans = word_spans(self.verses[self.verse_cursor].text)
+        target: tuple[int, int] | None = None
+        if motion == "w":
+            target = next(((self.verse_cursor, start) for start, _ in spans if start > col), None)
+            if target is None and self.verse_cursor + 1 < len(self.verses):
+                next_spans = word_spans(self.verses[self.verse_cursor + 1].text)
+                target = (self.verse_cursor + 1, next_spans[0][0] if next_spans else 0)
+        elif motion == "b":
+            target = next(((self.verse_cursor, start) for start, _ in reversed(spans) if start < col), None)
+            if target is None and self.verse_cursor > 0:
+                previous_spans = word_spans(self.verses[self.verse_cursor - 1].text)
+                target = (self.verse_cursor - 1, previous_spans[-1][0] if previous_spans else 0)
+        elif motion == "e":
+            target = next(((self.verse_cursor, end - 1) for _, end in spans if end - 1 > col), None)
+            if target is None and self.verse_cursor + 1 < len(self.verses):
+                next_spans = word_spans(self.verses[self.verse_cursor + 1].text)
+                target = (self.verse_cursor + 1, next_spans[0][1] - 1 if next_spans else 0)
+        if target is None:
+            return
+        self.verse_cursor, self.text_cursor_col = target
+        self.ensure_visible()
+
+    def step_chapter(self, delta: int) -> None:
+        """Turn the page: the next or previous chapter, crossing into the adjacent book in Bible order."""
+        if self.selected_book is None or self.selected_chapter is None:
+            return
+        index = self.chapters.index(self.selected_chapter) + delta
+        if 0 <= index < len(self.chapters):
+            self.chapter_cursor = index
+            self.select_chapter(index)
+        else:
+            canonical = self.store.books(False)
+            position = next(i for i, book in enumerate(canonical) if book.id == self.selected_book.id)
+            target = position + (1 if delta > 0 else -1)
+            if not 0 <= target < len(canonical):
+                self.message = "last chapter" if delta > 0 else "first chapter"
+                return
+            self.book_cursor = next(i for i, book in enumerate(self.books) if book.id == canonical[target].id)
+            self.select_book(self.book_cursor)
+            if delta < 0 and self.chapters:
+                self.chapter_cursor = len(self.chapters) - 1
+                self.select_chapter(self.chapter_cursor)
+        self.message = f"{self.selected_book.name} {self.selected_chapter}"
+        self.ensure_visible()
+
+    def cycle_focus(self, delta: int) -> None:
+        if delta > 0 and self.focus == FOCUS_TEXT:
+            self.focus = FOCUS_BOOKS
+        elif delta < 0 and self.focus == FOCUS_BOOKS:
+            if self.verses:
+                self.focus = FOCUS_TEXT
+        elif delta > 0:
+            self.move_focus_right()
+        else:
+            self.move_focus_left()
         self.ensure_visible()
 
     def move_verse_cursor(self, delta: int) -> None:
@@ -1125,9 +1344,9 @@ class BibleTui:
             self.move_verse_cursor(delta)
         self.ensure_visible()
 
-    def page(self, direction: int) -> None:
+    def page(self, direction: int, half: bool = False) -> None:
         _, _, content_h, _, _, _ = self.layout()
-        page_size = max(1, content_h - 4)
+        page_size = max(1, (content_h - 2) // 2) if half else max(1, content_h - 4)
         if self.focus == FOCUS_BOOKS and self.books:
             self.book_cursor = clamp(
                 self.book_cursor + direction * page_size, 0, len(self.books) - 1
@@ -1331,9 +1550,15 @@ class BibleTui:
                 base_attr = 0
             win.addnstr(row + 1, 1, " " * inner_w, inner_w, base_attr)
             if line.verse_number:
+                key = self.verse_key(line.verse_index)
+                if key is not None and self.marks.is_marked(key):
+                    sign_attr = curses.color_pair(PAIR_SIGN_SELECTED if selected else PAIR_SIGN) | curses.A_BOLD
+                    win.addnstr(row + 1, 1, self.mark_sign, 1, sign_attr)
                 number_attr = base_attr | curses.A_BOLD if selected else curses.color_pair(3) | curses.A_BOLD
-                win.addnstr(row + 1, 1, line.verse_number, 4, number_attr)
-            self.draw_text_segment(win, row + 1, 5, line, max(0, inner_w - 4), base_attr)
+                win.addnstr(row + 1, 1 + SIGN_WIDTH, line.verse_number, NUMBER_WIDTH, number_attr)
+            self.draw_text_segment(
+                win, row + 1, 1 + GUTTER_WIDTH, line, max(0, inner_w - GUTTER_WIDTH), base_attr
+            )
         self.draw_scrollbar(win, len(lines), self.text_scroll, inner_h)
 
     def draw_status(self, y: int, width: int) -> None:
@@ -1346,7 +1571,7 @@ class BibleTui:
         status = f" {version} | {location} | focus: {focus} "
         if self.message:
             status = f"{status}| {self.message} "
-        visual = "-- VISUAL --"
+        visual = "-- VISUAL LINE --" if self.visual_line else "-- VISUAL --"
         hint_width = len("ctrl+p commands")
         # Keep the status text clear of the right-aligned visual marker and command hint.
         reserved = hint_width + 2 + (len(visual) + 1 if self.visual_mode else 0)
@@ -1915,7 +2140,7 @@ class BibleTui:
     def wrapped_verses(self, width: int) -> list[RenderLine]:
         if not self.verses:
             return []
-        text_width = max(8, width - 4)
+        text_width = max(8, width - GUTTER_WIDTH)
         lines: list[RenderLine] = []
         for verse_index, verse in enumerate(self.verses):
             wrapped = textwrap.wrap(
@@ -1973,7 +2198,7 @@ class BibleTui:
             if line.verse_index == self.verse_cursor and line.start_col <= self.text_cursor_col <= max(line.start_col, line_end):
                 self.set_cursor_visibility(True)
                 col = min(max(0, self.text_cursor_col - line.start_col), max(0, len(line.text) - 1))
-                self.stdscr.move(content_y + row + 1, text_x + 5 + col)
+                self.stdscr.move(content_y + row + 1, text_x + 1 + GUTTER_WIDTH + col)
                 return
         self.set_cursor_visibility(False)
 
@@ -2006,6 +2231,9 @@ class BibleTui:
             return None
         current = (self.verse_cursor, self.text_cursor_col)
         start, end = sorted((self.visual_anchor, current))
+        if self.visual_line:
+            last_col = max(0, len(self.verses[end[0]].text) - 1)
+            return (start[0], 0), (end[0], last_col)
         return start, end
 
     def char_is_selected(
@@ -2087,6 +2315,11 @@ def scroll_to_cursor(cursor: int, scroll: int, visible: int) -> int:
     if cursor >= scroll + visible:
         return cursor - visible + 1
     return scroll
+
+
+def word_spans(text: str) -> list[tuple[int, int]]:
+    """Vim-style words: runs of letters/digits, or runs of other non-space characters."""
+    return [match.span() for match in re.finditer(r"\w+|[^\w\s]+", text)]
 
 
 def match_spans(text: str, query: str) -> list[tuple[int, int]]:

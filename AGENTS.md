@@ -20,6 +20,8 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 - `bible_tui/versions.py` holds `BibleVersion`, `inspect_database` (schema check plus metadata), and
   `discover_versions` (priority-ordered folders; an earlier folder wins when abbreviations collide). It also has
   `connect_read_only`.
+- `bible_tui/marks.py` holds `MarkStore`: marked verses keyed by `(sort_order, chapter, verse)` and saved to
+  `marks.json` with `config.write_json`. A store whose file failed to load keeps `load_error` and refuses to save.
 - `bible_tui/store.py` holds `BibleStore` (read-only queries for one version), the `Book`/`Verse`/`BibleVerse`
   models, and `BOOK_ABBREVIATIONS`.
 - `bible_tui/tui.py` is the curses UI (`BibleTui`) plus the pure search/fuzzy helpers.
@@ -54,6 +56,8 @@ disabled.
 - Versions can differ in verse coverage (the ASV omits 16 verses) and may be partial. Cross-version positions
   use `(book sort_order, chapter, verse)`, not row ids; restoring a missing verse falls back to the nearest
   earlier verse. Future bookmarks, highlights, and notes must use the same version-independent key.
+- Never overwrite user data that failed to load (see `MarkStore.load_error`); losing marks or notes is
+  worse than refusing to save.
 - The user writes `config.json` and the app never rewrites it. App-written data goes in separate files in the
   app home, saved with `config.write_json`.
 - Commands that only report (`--paths`, `--list-versions`) must not create the app home.
@@ -72,10 +76,23 @@ disabled.
   status. `/` edits the active search again, `n`/`N` jump through matches, and Esc clears highlighting. From the
   chapters pane, `/` first selects the highlighted chapter and moves focus to text search. Only `q` exits the
   TUI; Esc is for clearing/dismissing UI modes.
-- `ctrl+f` opens the native full-Bible fuzzy finder. It must stay dependency-free and must not shell out to
+- `ctrl+s` opens the native full-Bible fuzzy finder (`ctrl+s` again inside shows the query syntax). It must stay dependency-free and must not shell out to
   `fzf`. Results use common book abbreviations, an ellipsized snippet column, and a preview pane.
 - `ctrl+g` opens a go-to-reference modal for references like `John 3:16`. Autocomplete uses Tab to accept
   suggestions and `ctrl+n` to cycle suggestions.
+- Keybinding policy: every action must be reachable without Vim knowledge (arrows, Tab, Page Up/Down,
+  Home/End, Enter, Esc). Vim keys are extra aliases, never the only way. Current aliases: `h`/`j`/`k`/`l`,
+  `ctrl+u`/`ctrl+d` (half page), `ctrl+b`/`ctrl+f` (page), `gg`/`G`, `0`/`$`, `w`/`b`/`e`, `v`/`V`, `y`/`yy`,
+  `:` (go to), and `?` (commands). Don't add count prefixes, marks, jump lists, `H`/`M`/`L`, or `ctrl+w`
+  window commands. Two-key sequences (`gg`, `yy`) use the `pending_g`/`pending_y` flags. `]`/`[` step chapters
+  across books in Bible order even when the list is alphabetical. Moving focus right must not re-select the
+  book or chapter already shown (`ensure_cursor_book_selected`), or you lose your place.
+- The text pane gutter is a 2-cell sign column followed by the 4-cell verse number (`SIGN_WIDTH`,
+  `NUMBER_WIDTH`, `GUTTER_WIDTH`). It's always shown, like Vim's `signcolumn=yes`, so text never shifts. Signs
+  are drawn on a verse's first line only. The mark sign is `MARK_SIGN_NERD_FONT` (U+F02E, nf-fa-bookmark,
+  present in Nerd Fonts v2 and v3) when the `nerd_font` setting is true, otherwise `MARK_SIGN_PLAIN` (`●`),
+  in blue. Nerd Font use is always opt-in; never try to detect the font.
+- `m` toggles a mark on the current verse or every verse in the visual selection (`BibleTui.toggle_mark`).
 - `t` opens the version picker (also in `ctrl+p`). `BibleTui.switch_version` swaps the store, clears the
   per-version caches (`all_verses`, `goto_verse_cache`, active search), restores the position, and calls
   `on_version_change`. The CLI uses that callback to record `last_version` in `state.json`.

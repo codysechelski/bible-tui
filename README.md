@@ -43,23 +43,41 @@ bible-tui --bibles-dir ~/Bibles   # search an extra folder (repeatable)
 
 ### Key bindings
 
-- `j`/`k` or up/down: move within the focused pane
-- `h`/`l` or left/right: move between books and chapters
-- left/right: move into and out of the text pane
-- `h`/`l` in the text pane: move the verse cursor by character
-- `enter`: select the focused book or chapter; from chapters this moves focus to text
-- `t`: switch version; your book, chapter, and verse are kept
-- `v` in the text pane: enter visual mode
-- `y` in visual mode: yank selected text to the system clipboard
-- `yy` in the text pane: yank the current verse to the system clipboard
-- `a`: toggle book ordering between Bible order and alphabetical
-- `/`: search books or verses; Enter keeps search visible with match status, then use `n`/`N`, Esc, or `/` to
-  edit again
-- `ctrl+f`: fuzzy find across all verses with results and preview panes (`ctrl+s` inside shows the query syntax)
-- `ctrl+g`: go to a reference like `John 3:16` with autocomplete
-- `ctrl+p`: open the commands list
-- `page up`/`page down`, `home`, `end`: faster scrolling
-- `q`: quit
+Every action has a key that works without knowing Vim: arrows, Tab, Page Up/Down, Home/End, Enter, Esc. Vim and
+Neovim users get the usual alternatives too. `ctrl+p` (or `?`) lists them all inside the app.
+
+| Action | Keys | Vim-style |
+| --- | --- | --- |
+| Move up / down | ↑ / ↓ | `k` / `j` |
+| Move between books and chapters | ← / → | `h` / `l` |
+| Next / previous pane | Tab / Shift+Tab | |
+| Next / previous chapter (continues into the next/previous book) | `]` / `[` | |
+| Half page up / down | | `ctrl+u` / `ctrl+d` |
+| Page up / down | Page Up / Page Down | `ctrl+b` / `ctrl+f` |
+| First / last item | Home / End | `gg` / `G` |
+| Select the book or chapter | Enter | |
+| Switch version (keeps your place) | `t` | |
+| Toggle Bible order / alphabetical | `a` | |
+| Search books or the chapter | `/`, then `n` / `N` for matches, Esc to clear | |
+| Fuzzy find across the whole Bible | `ctrl+s` (press again inside for the query syntax) | |
+| Go to a reference like `John 3:16` | `ctrl+g` | `:` |
+| Commands and key list | `ctrl+p` | `?` |
+| Quit | `q` | |
+
+In the text pane:
+
+| Action | Keys |
+| --- | --- |
+| Move the cursor by character | `h` / `l` |
+| Start / end of the verse | `0` / `$` |
+| Next word / previous word / end of word | `w` / `b` / `e` |
+| Select text / select whole verses | `v` / `V` (press again or Esc to cancel) |
+| Copy the selection | `y` |
+| Copy the current verse | `yy` |
+| Mark / unmark the verse (or every verse in a selection) | `m` |
+
+Copying uses the system clipboard. Marked verses show `●` in the column left of the verse number, or a
+bookmark icon if you set `"nerd_font": true` in `config.json`. Marks are saved and show in every version.
 
 ## Adding versions
 
@@ -76,7 +94,8 @@ Settings live in `config.json` in the app home: `~/.bible-tui` if that folder ex
 {
   "default_version": "KJV",
   "bibles_dirs": ["~/Bibles"],
-  "book_order": "bible"
+  "book_order": "bible",
+  "nerd_font": false
 }
 ```
 

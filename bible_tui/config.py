@@ -29,6 +29,7 @@ class Settings:
     default_version: str | None = None
     bibles_dirs: tuple[Path, ...] = ()
     book_order: str = "bible"
+    nerd_font: bool = False
     warnings: tuple[str, ...] = field(default=(), compare=False)
 
 
@@ -65,7 +66,7 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"{path}: expected a JSON object at the top level")
 
     warnings: list[str] = []
-    known = {"default_version", "bibles_dirs", "book_order"}
+    known = {"default_version", "bibles_dirs", "book_order", "nerd_font"}
     for key in sorted(set(data) - known):
         warnings.append(f"{path}: ignoring unknown setting {key!r}")
 
@@ -88,10 +89,15 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
     if book_order not in BOOK_ORDERS:
         raise ConfigError(f"{path}: book_order must be one of {', '.join(BOOK_ORDERS)}")
 
+    nerd_font = data.get("nerd_font", False)
+    if not isinstance(nerd_font, bool):
+        raise ConfigError(f"{path}: nerd_font must be true or false")
+
     return Settings(
         default_version=default_version or None,
         bibles_dirs=tuple(bibles_dirs),
         book_order=book_order,
+        nerd_font=nerd_font,
         warnings=tuple(warnings),
     )
 
