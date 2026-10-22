@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bible-tui"
+dynamic = ["version"]
+description = "A dependency-free terminal Bible reader with Vim-style navigation and pluggable versions"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+classifiers = [
+    "Environment :: Console :: Curses",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+bible-tui = "bible_tui.cli:main"
+
+[tool.setuptools]
+packages = ["bible_tui"]
+
+[tool.setuptools.package-data]
+bible_tui = ["bibles/*.sqlite"]
+
+[tool.setuptools.dynamic]
+version = { attr = "bible_tui.__version__" }
