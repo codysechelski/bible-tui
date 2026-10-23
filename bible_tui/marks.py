@@ -46,6 +46,11 @@ class MarkStore:
     def is_marked(self, key: VerseKey) -> bool:
         return key in self.marks
 
+    def newest_first(self) -> list[tuple[VerseKey, str]]:
+        """Marks with their ``created_at``, newest first. Verses marked together stay in Bible order."""
+        in_bible_order = sorted(self.marks.items())
+        return sorted(in_bible_order, key=lambda item: item[1], reverse=True)
+
     def toggle(self, keys: Iterable[VerseKey]) -> bool:
         """Mark every key, or unmark them all if they are all marked already.
         Returns True if the keys are now marked."""
@@ -61,6 +66,16 @@ class MarkStore:
                 self.marks.pop(key, None)
         self.save()
         return mark
+
+    def remove(self, key: VerseKey) -> None:
+        created_at = self.marks.pop(key, None)
+        if created_at is None:
+            return
+        try:
+            self.save()
+        except (MarkError, OSError):
+            self.marks[key] = created_at  # Keep showing what's still on disk.
+            raise
 
     def save(self) -> None:
         if self.path is None:

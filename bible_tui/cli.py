@@ -12,11 +12,13 @@ from pathlib import Path
 
 from bible_tui import __version__
 from bible_tui.config import ConfigError, Settings, load_settings, load_state, save_state
+from bible_tui.highlights import HighlightStore
 from bible_tui.marks import MarkStore
 from bible_tui.paths import (
     BIBLES_DIR_NAME,
     BUNDLED_BIBLES_DIR,
     CONFIG_FILE_NAME,
+    HIGHLIGHTS_FILE_NAME,
     MARKS_FILE_NAME,
     STATE_FILE_NAME,
     home_candidates,
@@ -124,11 +126,13 @@ def print_paths(home: Path, config_path: Path, search_path: Sequence[Path], env:
     for candidate in home_candidates(env):
         marker = "*" if candidate == home else " "
         print(f"  {marker} {describe(candidate)}{status(candidate)}")
-    print(f"\nConfig: {describe(config_path)}{status(config_path)}")
+    print(f"\nConfig:     {describe(config_path)}{status(config_path)}")
     state_path = home / STATE_FILE_NAME
-    print(f"State:  {describe(state_path)}{status(state_path)}")
+    print(f"State:      {describe(state_path)}{status(state_path)}")
     marks_path = home / MARKS_FILE_NAME
-    print(f"Marks:  {describe(marks_path)}{status(marks_path)}")
+    print(f"Marks:      {describe(marks_path)}{status(marks_path)}")
+    highlights_path = home / HIGHLIGHTS_FILE_NAME
+    print(f"Highlights: {describe(highlights_path)}{status(highlights_path)}")
     print("\nBible folders (earlier folders win when versions share a name):")
     for index, directory in enumerate(search_path, 1):
         print(f"  {index}. {describe(directory)}{status(directory)}")
@@ -156,6 +160,7 @@ def run_tui(
     home: Path,
     state: dict[str, object],
     marks: MarkStore,
+    highlights: HighlightStore,
     warnings: Sequence[str] = (),
 ) -> None:
     from bible_tui.store import BibleStore
@@ -174,6 +179,7 @@ def run_tui(
             alphabetical=settings.book_order == "alphabetical",
             on_version_change=remember,
             marks=marks,
+            highlights=highlights,
             nerd_font=settings.nerd_font,
         )
         if warnings:
@@ -230,11 +236,15 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         if marks.load_error:
             choice_warnings.append(f"marks are read-only until this is fixed: {marks.load_error}")
             print(f"bible-tui: warning: {choice_warnings[-1]}", file=sys.stderr)
+        highlights = HighlightStore.load(home)
+        if highlights.load_error:
+            choice_warnings.append(f"highlights are read-only until this is fixed: {highlights.load_error}")
+            print(f"bible-tui: warning: {choice_warnings[-1]}", file=sys.stderr)
         warnings = [*settings.warnings, *choice_warnings]
     except (CliError, ConfigError) as error:
         print(f"bible-tui: {error}", file=sys.stderr)
         return 1
 
     locale.setlocale(locale.LC_ALL, "")
-    run_tui(version, discovery.versions, settings, home, state, marks, warnings)
+    run_tui(version, discovery.versions, settings, home, state, marks, highlights, warnings)
     return 0

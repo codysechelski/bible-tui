@@ -12,7 +12,9 @@ import termios
 import textwrap
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
+from bible_tui.highlights import HIGHLIGHT_COLORS, HighlightError, HighlightStore
 from bible_tui.marks import MarkError, MarkStore, VerseKey
 from bible_tui.store import BOOK_ABBREVIATIONS, BibleStore, BibleVerse, Book, Verse
 from bible_tui.versions import BibleVersion
@@ -34,6 +36,26 @@ PAIR_ERROR = 9
 PAIR_HEADING = 10
 PAIR_SIGN = 11
 PAIR_SIGN_SELECTED = 12
+PAIR_HIGHLIGHT_BASE = 13  # One pair per HIGHLIGHT_COLORS entry, in order.
+
+# Highlight backgrounds: (256-color background, 8-color background, 8-color foreground).
+# 256-color terminals get soft tints with black text, like a paper highlighter.
+HIGHLIGHT_PALETTE: dict[str, tuple[int, int, int]] = {
+    "yellow": (222, curses.COLOR_YELLOW, curses.COLOR_BLACK),
+    "green": (114, curses.COLOR_GREEN, curses.COLOR_BLACK),
+    "blue": (111, curses.COLOR_CYAN, curses.COLOR_BLACK),
+    "purple": (183, curses.COLOR_BLUE, curses.COLOR_WHITE),
+    "pink": (218, curses.COLOR_MAGENTA, curses.COLOR_WHITE),
+    "orange": (215, curses.COLOR_RED, curses.COLOR_WHITE),
+}
+PICKER_CLEAR = len(HIGHLIGHT_COLORS)  # The picker row after the colors.
+
+LIST_MARKS = "marks"
+LIST_HIGHLIGHTS = "highlights"
+LIST_OPEN_KEYS: dict[str, tuple[int, ...]] = {
+    LIST_MARKS: (ord("M"), ord("'"), ord("`")),
+    LIST_HIGHLIGHTS: (ord("C"), ord('"')),
+}
 
 # The text pane gutter: a sign column (like Vim's signcolumn=yes), then the verse number.
 SIGN_WIDTH = 2
@@ -56,6 +78,15 @@ class Command:
     name: str
     keybind: str
     action: str
+
+
+@dataclass(frozen=True)
+class ListRow:
+    """A row in the marks or highlights list. ``color`` is None for marks."""
+
+    key: VerseKey
+    created_at: str
+    color: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +152,9 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
             Command("yank selection", "y", "yank_selection"),
             Command("yank verse", "yy", "yank_verse"),
             Command("toggle mark", "m", "toggle_mark"),
+            Command("list marks", "M / '", "list_marks"),
+            Command("highlight", "c", "highlight"),
+            Command("list highlights", 'C / "', "list_highlights"),
         ),
     ),
     (
@@ -197,6 +231,7 @@ class BibleTui:
         alphabetical: bool = False,
         on_version_change: Callable[[BibleVersion], None] | None = None,
         marks: MarkStore | None = None,
+        highlights: HighlightStore | None = None,
         nerd_font: bool = False,
     ) -> None:
         self.stdscr = stdscr
@@ -205,6 +240,7 @@ class BibleTui:
         self.versions: tuple[BibleVersion, ...] = tuple(versions) or (version,)
         self.on_version_change = on_version_change
         self.marks = marks if marks is not None else MarkStore(None)
+        self.highlights = highlights if highlights is not None else HighlightStore(None)
         self.mark_sign = MARK_SIGN_NERD_FONT if nerd_font else MARK_SIGN_PLAIN
         self.version_modal_open = False
         self.version_cursor = 0
@@ -253,6 +289,14 @@ class BibleTui:
         self.goto_suggestion_cursor = 0
         self.goto_scroll = 0
         self.goto_verse_cache: dict[tuple[int, int], list[Verse]] = {}
+        self.list_kind: str | None = None  # LIST_MARKS or LIST_HIGHLIGHTS while the list modal is open.
+        self.list_rows: list[ListRow] = []
+        self.list_cursor = 0
+        self.list_scroll = 0
+        self.picker_open = False
+        self.picker_cursor = 0
+        self.picker_keys: list[VerseKey] = []
+        self.last_highlight_color = HIGHLIGHT_COLORS[0]
         if self.books:
             self.select_book(self.book_cursor)
 
@@ -275,6 +319,16 @@ class BibleTui:
         curses.init_pair(PAIR_HEADING, curses.COLOR_BLUE, -1)
         curses.init_pair(PAIR_SIGN, curses.COLOR_BLUE, -1)
         curses.init_pair(PAIR_SIGN_SELECTED, curses.COLOR_BLUE, curses.COLOR_WHITE)
+        rich = getattr(curses, "COLORS", 0) >= 256
+        for index, name in enumerate(HIGHLIGHT_COLORS):
+            tint, background, foreground = HIGHLIGHT_PALETTE[name]
+            try:
+                if rich:
+                    curses.init_pair(PAIR_HIGHLIGHT_BASE + index, curses.COLOR_BLACK, tint)
+                else:
+                    curses.init_pair(PAIR_HIGHLIGHT_BASE + index, foreground, background)
+            except curses.error:
+                curses.init_pair(PAIR_HIGHLIGHT_BASE + index, foreground, background)
         try:
             curses.set_escdelay(25)
         except AttributeError:
@@ -298,6 +352,10 @@ class BibleTui:
     def handle_key(self, key: int) -> bool:
         if self.version_modal_open:
             return self.handle_version_modal_key(key)
+        if self.picker_open:
+            return self.handle_picker_key(key)
+        if self.list_kind is not None:
+            return self.handle_list_modal_key(key)
         if self.goto_open:
             return self.handle_goto_key(key)
         if self.fuzzy_open:
@@ -354,6 +412,14 @@ class BibleTui:
             self.pending_y = False
             self.toggle_mark()
             return True
+        if key == ord("c"):
+            self.pending_y = False
+            self.open_highlight_picker()
+            return True
+        for kind, open_keys in LIST_OPEN_KEYS.items():
+            if key in open_keys:
+                self.open_list_modal(kind)
+                return True
         if key in (ord("h"), ord("l")) and self.focus == FOCUS_TEXT and self.verses:
             self.pending_y = False
             self.move_text_cursor(-1 if key == ord("h") else 1)
@@ -501,6 +567,12 @@ class BibleTui:
             self.open_command_modal()
         elif action == "toggle_mark":
             self.toggle_mark()
+        elif action == "list_marks":
+            self.open_list_modal(LIST_MARKS)
+        elif action == "highlight":
+            self.open_highlight_picker()
+        elif action == "list_highlights":
+            self.open_list_modal(LIST_HIGHLIGHTS)
         elif action == "home":
             self.home()
         elif action == "end":
@@ -645,6 +717,175 @@ class BibleTui:
                 (index for index, item in enumerate(self.verses) if item.number <= verse),
                 default=0,
             )
+
+    def open_list_modal(self, kind: str) -> None:
+        self.pending_y = False
+        self.exit_visual_mode()
+        self.command_modal_open = False
+        self.search_input_active = False
+        self.list_kind = kind
+        if kind == LIST_MARKS:
+            self.list_rows = [ListRow(key, created_at) for key, created_at in self.marks.newest_first()]
+        else:
+            self.list_rows = [
+                ListRow(key, highlight.created_at, highlight.color)
+                for key, highlight in self.highlights.newest_first()
+            ]
+        self.list_cursor = 0
+        self.list_scroll = 0
+        self.message = ""
+
+    def close_list_modal(self) -> None:
+        self.list_kind = None
+
+    def handle_list_modal_key(self, key: int) -> bool:
+        if key == 27 or key in LIST_OPEN_KEYS[self.list_kind]:
+            self.close_list_modal()
+            return True
+        last = max(0, len(self.list_rows) - 1)
+        page = self.list_visible_rows()
+        moves = {
+            curses.KEY_UP: self.list_cursor - 1,
+            ord("k"): self.list_cursor - 1,
+            curses.KEY_DOWN: self.list_cursor + 1,
+            ord("j"): self.list_cursor + 1,
+            curses.KEY_PPAGE: self.list_cursor - page,
+            KEY_CTRL_B: self.list_cursor - page,
+            curses.KEY_NPAGE: self.list_cursor + page,
+            KEY_CTRL_F: self.list_cursor + page,
+            curses.KEY_HOME: 0,
+            ord("g"): 0,
+            curses.KEY_END: last,
+            ord("G"): last,
+        }
+        if key in moves:
+            self.list_cursor = clamp(moves[key], 0, last)
+            self.list_scroll = scroll_to_cursor(self.list_cursor, self.list_scroll, page)
+            return True
+        if key in (ord("\n"), curses.KEY_ENTER, 10, 13):
+            self.close_list_modal()
+            if self.list_rows:
+                self.jump_to_key(self.list_rows[self.list_cursor].key)
+            return True
+        if key in (ord("d"), curses.KEY_DC) and self.list_rows:
+            self.delete_selected_list_row()
+            return True
+        return True
+
+    def delete_selected_list_row(self) -> None:
+        key = self.list_rows[self.list_cursor].key
+        try:
+            if self.list_kind == LIST_MARKS:
+                self.marks.remove(key)
+            else:
+                self.highlights.remove(key)
+        except (MarkError, HighlightError, OSError) as error:
+            self.message = f"{self.list_kind} not saved: {error}"
+            return
+        del self.list_rows[self.list_cursor]
+        self.list_cursor = clamp(self.list_cursor, 0, max(0, len(self.list_rows) - 1))
+        self.list_scroll = scroll_to_cursor(self.list_cursor, self.list_scroll, self.list_visible_rows())
+        if self.list_kind == LIST_MARKS:
+            self.message = f"unmarked {self.verse_reference(key)}"
+        else:
+            self.message = f"removed highlight from {self.verse_reference(key)}"
+
+    def list_visible_rows(self) -> int:
+        height, _ = self.stdscr.getmaxyx()
+        return max(1, min(len(self.list_rows), height - 6))
+
+    def key_book(self, key: VerseKey) -> Book | None:
+        return next((book for book in self.books if book.sort_order == key[0]), None)
+
+    def verse_reference(self, key: VerseKey) -> str:
+        book = self.key_book(key)
+        name = BOOK_ABBREVIATIONS.get(book.name, book.name) if book else f"Book {key[0]}"
+        return f"{name} {key[1]}:{key[2]}"
+
+    def text_for_key(self, key: VerseKey) -> str | None:
+        """The verse's text in this version, or None if the version leaves it out."""
+        book = self.key_book(key)
+        if book is None:
+            return None
+        verse = next(
+            (verse for verse in self.verses_for_reference(book.id, key[1]) if verse.number == key[2]),
+            None,
+        )
+        return verse.text if verse else None
+
+    def jump_to_key(self, key: VerseKey) -> None:
+        book = self.key_book(key)
+        if book is None or key[1] not in self.store.chapters(book.id):
+            self.message = f"{self.verse_reference(key)} is not in {self.version.name}"
+            return
+        self.restore_position(key)
+        self.text_cursor_col = 0
+        self.focus = FOCUS_TEXT
+        self.clear_search()
+        self.message = f"selected {self.location_label()}"
+        self.ensure_visible()
+
+    def open_highlight_picker(self) -> None:
+        if self.focus != FOCUS_TEXT or not self.verses:
+            self.message = "select a verse to highlight"
+            return
+        self.picker_keys = self.target_verse_keys()
+        self.exit_visual_mode()
+        self.command_modal_open = False
+        colors = {self.highlights.color(key) for key in self.picker_keys}
+        current = colors.pop() if len(colors) == 1 else None
+        color = current if current in HIGHLIGHT_COLORS else self.last_highlight_color
+        self.picker_cursor = HIGHLIGHT_COLORS.index(color)
+        self.picker_open = True
+        self.message = ""
+
+    def close_highlight_picker(self) -> None:
+        self.picker_open = False
+        self.picker_keys = []
+
+    def handle_picker_key(self, key: int) -> bool:
+        if key in (27, ord("c")):
+            self.close_highlight_picker()
+            return True
+        moves = {
+            curses.KEY_UP: self.picker_cursor - 1,
+            ord("k"): self.picker_cursor - 1,
+            curses.KEY_DOWN: self.picker_cursor + 1,
+            ord("j"): self.picker_cursor + 1,
+            curses.KEY_HOME: 0,
+            ord("g"): 0,
+            curses.KEY_END: PICKER_CLEAR,
+            ord("G"): PICKER_CLEAR,
+        }
+        if key in moves:
+            self.picker_cursor = clamp(moves[key], 0, PICKER_CLEAR)
+            return True
+        if ord("1") <= key < ord("1") + len(HIGHLIGHT_COLORS):
+            self.apply_highlight(HIGHLIGHT_COLORS[key - ord("1")])
+            return True
+        if key in (ord("0"), ord("x"), ord("d"), curses.KEY_DC):
+            self.apply_highlight(None)
+            return True
+        if key in (ord("\n"), curses.KEY_ENTER, 10, 13):
+            row = self.picker_cursor
+            self.apply_highlight(None if row == PICKER_CLEAR else HIGHLIGHT_COLORS[row])
+            return True
+        return True
+
+    def apply_highlight(self, color: str | None) -> None:
+        keys = self.picker_keys
+        self.close_highlight_picker()
+        try:
+            self.highlights.apply(keys, color)
+        except (HighlightError, OSError) as error:
+            self.message = f"highlights not saved: {error}"
+            return
+        target = self.verse_reference(keys[0]) if len(keys) == 1 else f"{len(keys)} verses"
+        if color is None:
+            self.message = f"cleared highlight from {target}"
+        else:
+            self.last_highlight_color = color
+            self.message = f"highlighted {target} {color}"
 
     def open_fuzzy_finder(self) -> None:
         self.pending_y = False
@@ -1169,14 +1410,25 @@ class BibleTui:
             return None
         return (self.selected_book.sort_order, self.selected_chapter, self.verses[verse_index].number)
 
+    def target_verse_keys(self) -> list[VerseKey]:
+        """Keys for every verse in the visual selection, or just the current verse."""
+        selection = self.visual_selection_bounds()
+        indexes = range(selection[0][0], selection[1][0] + 1) if selection else [self.verse_cursor]
+        return [key for key in (self.verse_key(index) for index in indexes) if key is not None]
+
+    def highlight_attr(self, color: str | None) -> int:
+        if color is None:
+            return 0
+        if color not in HIGHLIGHT_COLORS:
+            return curses.A_UNDERLINE  # A color name from a newer app: show something, keep the data.
+        return curses.color_pair(PAIR_HIGHLIGHT_BASE + HIGHLIGHT_COLORS.index(color))
+
     def toggle_mark(self) -> None:
         """Mark or unmark the current verse, or every verse in the visual selection."""
         if self.focus != FOCUS_TEXT or not self.verses:
             self.message = "select a verse to mark"
             return
-        selection = self.visual_selection_bounds()
-        indexes = range(selection[0][0], selection[1][0] + 1) if selection else [self.verse_cursor]
-        keys = [key for key in (self.verse_key(index) for index in indexes) if key is not None]
+        keys = self.target_verse_keys()
         try:
             marked = self.marks.toggle(keys)
         except (MarkError, OSError) as error:
@@ -1460,6 +1712,10 @@ class BibleTui:
             self.draw_goto_modal(height, width)
         if self.version_modal_open:
             self.draw_version_modal(height, width)
+        if self.list_kind is not None:
+            self.draw_list_modal(height, width)
+        if self.picker_open:
+            self.draw_highlight_picker(height, width)
         if self.search_input_active:
             self.position_search_cursor(height - 1, width)
         elif self.goto_open:
@@ -1756,6 +2012,122 @@ class BibleTui:
             win.addnstr(row + 1, 2, marker, 1, marker_attr)
             win.addnstr(row + 1, 4, version.name, max(0, modal_w - 6), name_attr)
         self.draw_scrollbar(win, len(self.versions), self.version_scroll, visible_rows)
+
+    def draw_list_modal(self, height: int, width: int) -> None:
+        marks = self.list_kind == LIST_MARKS
+        visible_rows = self.list_visible_rows()
+        modal_w = min(max(60, int(width * 0.7)), max(20, width - 4))
+        modal_h = visible_rows + 3
+        y = max(1, (height - modal_h) // 2)
+        x = max(0, (width - modal_w) // 2)
+        win = self.stdscr.derwin(modal_h, modal_w, y, x)
+        win.erase()
+        border_attr = curses.color_pair(5) | curses.A_BOLD
+        win.attron(border_attr)
+        win.box()
+        win.attroff(border_attr)
+
+        count = len(self.list_rows)
+        label = "Marks" if marks else "Highlights"
+        title = f" {label} ({count}) " if count else f" {label} "
+        win.addnstr(0, 2, title, max(0, modal_w - 4), curses.color_pair(2) | curses.A_BOLD)
+        esc = " esc "
+        if modal_w > len(title) + len(esc) + 6:
+            win.addnstr(0, modal_w - len(esc) - 2, esc, len(esc), curses.color_pair(4))
+
+        inner_w = max(0, modal_w - 2)
+        if not self.list_rows:
+            store = self.marks if marks else self.highlights
+            if store.load_error:
+                empty = f"{self.list_kind}.json could not be read: {store.load_error}"
+            elif marks:
+                empty = "No marks yet. Press m on a verse to mark it."
+            else:
+                empty = "No highlights yet. Press c on a verse to highlight it."
+            win.addnstr(1, 2, empty, max(0, modal_w - 4), curses.color_pair(4) | curses.A_DIM)
+        else:
+            swatch_w = 0 if marks else 3  # Two colored cells and a space.
+            date_w = len("2026-01-01 00:00")
+            visible = self.list_rows[self.list_scroll : self.list_scroll + visible_rows]
+            references = [self.verse_reference(item.key) for item in visible]
+            ref_w = max(len(reference) for reference in references)
+            date_x = 2 + swatch_w
+            ref_x = date_x + date_w + 2
+            text_x = ref_x + ref_w + 2
+            text_w = max(0, modal_w - text_x - 2)
+            for row, (item, reference) in enumerate(zip(visible, references)):
+                selected = self.list_scroll + row == self.list_cursor
+                row_attr = curses.color_pair(1) if selected else 0
+                date_attr = row_attr if selected else curses.color_pair(4) | curses.A_DIM
+                ref_attr = row_attr if selected else curses.color_pair(3) | curses.A_BOLD
+                text = self.text_for_key(item.key)
+                text_attr = row_attr if selected else curses.color_pair(2)
+                if text is None:
+                    text = f"(not in {self.version.name})"
+                    text_attr = row_attr if selected else curses.color_pair(4) | curses.A_DIM
+                if len(text) > text_w:
+                    text = text[: max(0, text_w - 3)].rstrip() + "..."
+                win.addnstr(row + 1, 1, " " * inner_w, inner_w, row_attr)
+                if swatch_w:
+                    win.addnstr(row + 1, 2, "  ", 2, self.highlight_attr(item.color))
+                win.addnstr(row + 1, date_x, format_mark_time(item.created_at), date_w, date_attr)
+                win.addnstr(row + 1, ref_x, reference, ref_w, ref_attr)
+                if text_w > 0:
+                    win.addnstr(row + 1, text_x, text, text_w, text_attr)
+            self.draw_scrollbar(win, count, self.list_scroll, visible_rows, track_h=visible_rows)
+
+        hints = (("d", "delete"), ("enter", "go"), ("esc", "close")) if self.list_rows else (("esc", "close"),)
+        hint = "  ".join(f"{key} {label}" for key, label in hints)
+        if self.list_rows and self.message:
+            # Status from the last action in the modal (a delete), on the left of the hints.
+            note_w = max(0, modal_w - len(hint) - 7)
+            win.addnstr(modal_h - 2, 2, self.message, note_w, curses.color_pair(4) | curses.A_DIM)
+        self.draw_modal_hints(win, modal_h - 2, modal_w, hints)
+
+    def draw_highlight_picker(self, height: int, width: int) -> None:
+        rows = len(HIGHLIGHT_COLORS) + 1
+        modal_w = min(36, max(20, width - 4))
+        modal_h = rows + 3
+        y = max(1, (height - modal_h) // 2)
+        x = max(0, (width - modal_w) // 2)
+        win = self.stdscr.derwin(modal_h, modal_w, y, x)
+        win.erase()
+        border_attr = curses.color_pair(5) | curses.A_BOLD
+        win.attron(border_attr)
+        win.box()
+        win.attroff(border_attr)
+
+        count = len(self.picker_keys)
+        title = " Highlight " if count == 1 else f" Highlight {count} verses "
+        win.addnstr(0, 2, title, max(0, modal_w - 4), curses.color_pair(2) | curses.A_BOLD)
+        inner_w = max(0, modal_w - 2)
+        current = {self.highlights.color(key) for key in self.picker_keys}
+        for row in range(rows):
+            selected = row == self.picker_cursor
+            row_attr = curses.color_pair(1) if selected else 0
+            name_attr = row_attr if selected else curses.color_pair(2)
+            key_attr = row_attr if selected else curses.color_pair(4) | curses.A_DIM
+            win.addnstr(row + 1, 1, " " * inner_w, inner_w, row_attr)
+            if row == PICKER_CLEAR:
+                win.addnstr(row + 1, 3, " x ", 3, row_attr if selected else curses.color_pair(4) | curses.A_DIM)
+                name, number = "Clear", "0"
+            else:
+                color = HIGHLIGHT_COLORS[row]
+                win.addnstr(row + 1, 3, "   ", 3, self.highlight_attr(color))
+                name = color.capitalize() + ("  (current)" if current == {color} else "")
+                number = str(row + 1)
+            win.addnstr(row + 1, 8, name, max(0, modal_w - 13), name_attr)
+            win.addnstr(row + 1, modal_w - 4, number, 1, key_attr)
+        self.draw_modal_hints(win, modal_h - 2, modal_w, (("enter", "apply"), ("esc", "cancel")))
+
+    def draw_modal_hints(self, win: curses.window, y: int, modal_w: int, hints: tuple[tuple[str, str], ...]) -> None:
+        hint = "  ".join(f"{key} {label}" for key, label in hints)
+        hint_x = max(1, modal_w - len(hint) - 2)
+        for key, label in hints:
+            win.addnstr(y, hint_x, key, len(key), curses.color_pair(2))
+            hint_x += len(key) + 1
+            win.addnstr(y, hint_x, label, len(label), curses.color_pair(4) | curses.A_DIM)
+            hint_x += len(label) + 2
 
     def draw_fuzzy_finder(self, height: int, width: int) -> None:
         modal_y, modal_x, modal_h, modal_w = self.fuzzy_modal_geometry(height, width)
@@ -2172,11 +2544,15 @@ class BibleTui:
             return
         selection = self.visual_selection_bounds()
         search_spans = self.search_match_spans(line.verse_index)
+        key = self.verse_key(line.verse_index)
+        highlight = self.highlight_attr(self.highlights.color(key) if key is not None else None)
+        if highlight and base_attr:
+            highlight |= curses.A_BOLD  # The current verse: keep its color, bold to stand out.
         for offset, char in enumerate(line.text[:width]):
             absolute_col = line.start_col + offset
-            attr = base_attr
+            attr = highlight or base_attr
             if selection and self.char_is_selected(line.verse_index, absolute_col, selection):
-                attr = curses.A_REVERSE if not base_attr else base_attr | curses.A_REVERSE
+                attr = attr | curses.A_REVERSE
             if self.col_is_in_spans(absolute_col, search_spans):
                 attr = curses.color_pair(PAIR_SEARCH) | curses.A_BOLD
             win.addnstr(y, x + offset, char, 1, attr)
@@ -2185,6 +2561,8 @@ class BibleTui:
         if (
             self.command_modal_open
             or self.version_modal_open
+            or self.list_kind is not None
+            or self.picker_open
             or self.search_input_active
             or self.focus != FOCUS_TEXT
             or not self.verses
@@ -2303,6 +2681,14 @@ def copy_to_clipboard(text: str) -> bool:
             continue
         return True
     return False
+
+
+def format_mark_time(created_at: str) -> str:
+    """A mark's UTC ``created_at`` as local ``YYYY-MM-DD HH:MM``; blank if missing or unreadable."""
+    try:
+        return datetime.fromisoformat(created_at).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return ""
 
 
 def clamp(value: int, low: int, high: int) -> int:

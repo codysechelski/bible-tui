@@ -17,10 +17,11 @@ something. Run `bible-tui --paths` to see which folder is in use and what it con
 
 ```text
 ~/.config/bible-tui/
-├── config.json   # your settings; bible-tui only ever reads this file
-├── state.json    # remembered by the app (the last version you switched to)
-├── marks.json    # your marked verses
-└── bibles/       # drop extra Bible databases here
+├── config.json      # your settings; bible-tui only ever reads this file
+├── state.json       # remembered by the app (the last version you switched to)
+├── marks.json       # your marked verses
+├── highlights.json  # your highlighted verses and their colors
+└── bibles/          # drop extra Bible databases here
 ```
 
 `config.json` is yours. The app never rewrites it, so your formatting is kept. Anything the app records by
@@ -75,8 +76,8 @@ app from starting. See [bible-databases.md](bible-databases.md) for the database
 
 Each kind of user data gets its own app-written JSON file in the app home, saved the same atomic way as
 `state.json`. Separate files keep each one small, easy to back up or sync on its own, and make a damaged file
-affect only one feature. Marks are the first; highlights, notes, and saved searches will follow the same pattern
-(`highlights.json`, `notes.json`, `saved-searches.json`).
+affect only one feature. Marks and highlights work this way now; notes and saved searches will follow the same pattern (`notes.json`,
+`saved-searches.json`).
 
 Verses are stored by a version-independent reference rather than by database row ids: the book's canonical
 `sort_order` (1–66), the chapter, and the verse. A verse marked while reading the KJV shows as marked in the ASV
@@ -85,7 +86,8 @@ or any other version that has it.
 ### `marks.json`
 
 `m` marks or unmarks the current verse, or every verse in a visual selection. A marked verse shows a sign in the
-column left of its number.
+column left of its number. `M` or `'` lists every mark, newest first, Enter jumps to the selected one, and `d` or Delete removes it.
+`created_at` (UTC) records when the verse was marked; verses marked together keep Bible order.
 
 ```json
 {
@@ -99,3 +101,21 @@ column left of its number.
 `version` is the file format version. If the file can't be read, bible-tui says so at startup and leaves it
 untouched: existing marks are not shown, and new marks aren't saved until the file is fixed or removed, so a
 damaged file is never overwritten with an empty list.
+
+### `highlights.json`
+
+`c` opens a color picker for the current verse, or every verse in a visual selection: yellow, green, blue,
+purple, pink, orange, or clear. `C` or `"` lists every highlight, newest first; Enter jumps to one and `d` or
+Delete removes it.
+
+```json
+{
+  "version": 1,
+  "highlights": [
+    { "book": 43, "chapter": 3, "verse": 16, "color": "yellow", "created_at": "2026-10-23T18:24:53+00:00" }
+  ]
+}
+```
+
+Colors are stored by name, so the exact shades can change without touching your data. Changing a verse to a
+new color updates its `created_at`. A damaged file is handled the same way as `marks.json`.

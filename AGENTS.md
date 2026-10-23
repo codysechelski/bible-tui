@@ -16,19 +16,22 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   `$XDG_CONFIG_HOME/bible-tui`). Functions take an `env` mapping so tests never touch the real home.
 - `bible_tui/config.py` holds `Settings`/`load_settings` for the user-written `config.json` and
   `load_state`/`save_state` for the app-written `state.json`. It also has `write_json`, an atomic writer meant
-  for future bookmarks/highlights/notes files.
+  for marks, highlights, and future notes files.
 - `bible_tui/versions.py` holds `BibleVersion`, `inspect_database` (schema check plus metadata), and
   `discover_versions` (priority-ordered folders; an earlier folder wins when abbreviations collide). It also has
   `connect_read_only`.
 - `bible_tui/marks.py` holds `MarkStore`: marked verses keyed by `(sort_order, chapter, verse)` and saved to
   `marks.json` with `config.write_json`. A store whose file failed to load keeps `load_error` and refuses to save.
+- `bible_tui/highlights.py` holds `HighlightStore` and `HIGHLIGHT_COLORS`: the same pattern for `highlights.json`,
+  storing color names (never curses numbers). `apply` restores the old state if saving fails. Unknown color names
+  in the file are kept, and drawn underlined.
 - `bible_tui/store.py` holds `BibleStore` (read-only queries for one version), the `Book`/`Verse`/`BibleVerse`
   models, and `BOOK_ABBREVIATIONS`.
 - `bible_tui/tui.py` is the curses UI (`BibleTui`) plus the pure search/fuzzy helpers.
 - `bible_tui/bibles/` holds the bundled databases (package data, so installs include them). They are copied
   unchanged from the separate converter project; don't edit them by hand.
-- `docs/configuration.md` covers the app home, `config.json`, `state.json`, the search path, and the planned
-  user-data layout. `docs/bible-databases.md` covers the database schema, metadata keys, and the bundled
+- `docs/configuration.md` covers the app home, `config.json`, `state.json`, the search path, and the
+  user-data files (`marks.json`, `highlights.json`). `docs/bible-databases.md` covers the database schema, metadata keys, and the bundled
   versions.
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and
   `FakeScreen` (lets `BibleTui` logic run without a terminal).
@@ -55,7 +58,7 @@ disabled.
 - Databases are always opened read-only (`connect_read_only`). Never write to a Bible database.
 - Versions can differ in verse coverage (the ASV omits 16 verses) and may be partial. Cross-version positions
   use `(book sort_order, chapter, verse)`, not row ids; restoring a missing verse falls back to the nearest
-  earlier verse. Future bookmarks, highlights, and notes must use the same version-independent key.
+  earlier verse. Marks, highlights, and future notes use the same version-independent key.
 - Never overwrite user data that failed to load (see `MarkStore.load_error`); losing marks or notes is
   worse than refusing to save.
 - The user writes `config.json` and the app never rewrites it. App-written data goes in separate files in the
@@ -83,8 +86,8 @@ disabled.
 - Keybinding policy: every action must be reachable without Vim knowledge (arrows, Tab, Page Up/Down,
   Home/End, Enter, Esc). Vim keys are extra aliases, never the only way. Current aliases: `h`/`j`/`k`/`l`,
   `ctrl+u`/`ctrl+d` (half page), `ctrl+b`/`ctrl+f` (page), `gg`/`G`, `0`/`$`, `w`/`b`/`e`, `v`/`V`, `y`/`yy`,
-  `:` (go to), and `?` (commands). Don't add count prefixes, marks, jump lists, `H`/`M`/`L`, or `ctrl+w`
-  window commands. Two-key sequences (`gg`, `yy`) use the `pending_g`/`pending_y` flags. `]`/`[` step chapters
+  `:` (go to), `'`/`` ` `` (marks list), `"` (highlights list), and `?` (commands). Don't add count prefixes, Vim-style lettered marks, jump
+  lists, `H`/`L`, or `ctrl+w` window commands. `M`/`C` are the plain-key marks/highlights lists (`M` is not Vim's middle-of-screen). Two-key sequences (`gg`, `yy`) use the `pending_g`/`pending_y` flags. `]`/`[` step chapters
   across books in Bible order even when the list is alphabetical. Moving focus right must not re-select the
   book or chapter already shown (`ensure_cursor_book_selected`), or you lose your place.
 - The text pane gutter is a 2-cell sign column followed by the 4-cell verse number (`SIGN_WIDTH`,
@@ -93,6 +96,16 @@ disabled.
   present in Nerd Fonts v2 and v3) when the `nerd_font` setting is true, otherwise `MARK_SIGN_PLAIN` (`●`),
   in blue. Nerd Font use is always opt-in; never try to detect the font.
 - `m` toggles a mark on the current verse or every verse in the visual selection (`BibleTui.toggle_mark`).
+- `c` opens the highlight picker for the same targets (`target_verse_keys`): six colors plus Clear, keys `1`–`6`,
+  `0`/`x`/`d` to clear, or arrows and Enter. It preselects the verses' shared color, else the last color used.
+  Highlights are drawn as a background on the verse's text characters (`HIGHLIGHT_PALETTE`: soft 256-color tints
+  with black text, or ANSI colors on 8-color terminals). Precedence: search match > visual selection > highlight
+  > current-verse bar; a highlighted current verse keeps its color and is bold.
+- `M` (or `'`/`` ` ``) and `C` (or `"`) open one shared list modal (`list_kind` is `LIST_MARKS` or
+  `LIST_HIGHLIGHTS`): newest first by `created_at`, ties in Bible order. Rows show the current version's book
+  abbreviation and text (or `(not in <version>)`); highlights add a color swatch. Enter calls `jump_to_key`,
+  which uses `restore_position` like a version switch. `d`/Delete removes the row's mark or highlight; a failed
+  save leaves it in place.
 - `t` opens the version picker (also in `ctrl+p`). `BibleTui.switch_version` swaps the store, clears the
   per-version caches (`all_verses`, `goto_verse_cache`, active search), restores the position, and calls
   `on_version_change`. The CLI uses that callback to record `last_version` in `state.json`.

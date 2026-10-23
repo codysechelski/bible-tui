@@ -15,6 +15,7 @@ HOME_ENV = "BIBLE_TUI_HOME"
 CONFIG_FILE_NAME = "config.json"
 STATE_FILE_NAME = "state.json"
 MARKS_FILE_NAME = "marks.json"
+HIGHLIGHTS_FILE_NAME = "highlights.json"
 BIBLES_DIR_NAME = "bibles"
 
 
