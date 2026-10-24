@@ -18,7 +18,7 @@ something. Run `bible-tui --paths` to see which folder is in use and what it con
 ```text
 ~/.config/bible-tui/
 ├── config.json      # your settings; bible-tui only ever reads this file
-├── state.json       # remembered by the app (the last version you switched to)
+├── state.json       # remembered by the app (the last version you switched to, the split)
 ├── marks.json       # your marked verses
 ├── highlights.json  # your highlighted verses and their colors
 └── bibles/          # drop extra Bible databases here
@@ -37,7 +37,8 @@ Every key is optional. A missing file means all defaults.
   "default_version": "KJV",
   "bibles_dirs": ["~/Bibles", "/usr/share/bibles"],
   "book_order": "bible",
-  "nerd_font": false
+  "nerd_font": false,
+  "remember_split": false
 }
 ```
 
@@ -47,6 +48,7 @@ Every key is optional. A missing file means all defaults.
 | `bibles_dirs` | `[]` | Extra folders to search for Bible databases. `~` is expanded; relative paths are taken from the config file's folder. A single string is accepted too. |
 | `book_order` | `"bible"` | Starting book order: `"bible"` (canonical, grouped by testament) or `"alphabetical"`. `a` still toggles it in the app. |
 | `nerd_font` | `false` | Set to `true` if your terminal uses a [Nerd Font](https://www.nerdfonts.com/) to get icons, such as the bookmark icon for marked verses. Off by default because a terminal program can't detect the font, and a missing glyph shows as an empty box. Without it, plain Unicode symbols (`●`) are used. |
+| `remember_split` | `false` | Set to `true` to reopen a split (`ctrl+w v` or `ctrl+w s`) at launch, with the same orientation and second-pane version. The split is saved in `state.json` as `split` and `split_version`. |
 
 Unknown keys are ignored with a warning. Invalid JSON or a value of the wrong type stops the app with a message
 naming the file, line, and key. Use `--config FILE` to read a different file.

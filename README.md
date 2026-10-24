@@ -82,6 +82,22 @@ In the text pane:
 Copying uses the system clipboard. Marked verses show `●` in the column left of the verse number, or a
 bookmark icon if you set `"nerd_font": true` in `config.json`. Marks are saved and show in every version.
 
+### Comparing two versions
+
+Split the text pane to read two versions side by side (or one above the other). Choosing a book, chapter,
+reference, mark, or highlight moves both panes together. Each verse starts on the same line in both panes, and
+a verse that one version leaves out is shaded `░░░`.
+
+| Action | Keys |
+| --- | --- |
+| Split side by side / top and bottom (then pick the new pane's version) | `ctrl+w v` / `ctrl+w s` |
+| Move between the two text panes | ← / →, Tab, or `ctrl+w w` (`ctrl+w h`/`j`/`k`/`l`) |
+| Change either pane's version (two columns; ← / → picks the pane) | `t` |
+| Close the focused pane / the other pane | `ctrl+w q` / `ctrl+w o` |
+
+Two panes is the most. Visual mode, copying, `/` search, and fuzzy find use the focused pane's version. These
+are in the `ctrl+p` list too. Set `"remember_split": true` in `config.json` to reopen the split at launch.
+
 ## Adding versions
 
 Copy a Bible database into `~/.config/bible-tui/bibles/` and it shows up in the version picker. You can also
@@ -98,7 +114,8 @@ Settings live in `config.json` in the app home: `~/.bible-tui` if that folder ex
   "default_version": "KJV",
   "bibles_dirs": ["~/Bibles"],
   "book_order": "bible",
-  "nerd_font": false
+  "nerd_font": false,
+  "remember_split": false
 }
 ```
 

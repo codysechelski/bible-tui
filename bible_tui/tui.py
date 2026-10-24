@@ -11,7 +11,7 @@ import sys
 import termios
 import textwrap
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from bible_tui.highlights import HIGHLIGHT_COLORS, HighlightError, HighlightStore
@@ -30,6 +30,10 @@ KEY_CTRL_N = 14
 KEY_CTRL_P = 16
 KEY_CTRL_S = 19
 KEY_CTRL_U = 21
+KEY_CTRL_W = 23
+KEY_CTRL_O = 15
+KEY_CTRL_Q = 17
+KEY_CTRL_V = 22
 KEY_TAB = 9
 PAIR_SEARCH = 8
 PAIR_ERROR = 9
@@ -63,6 +67,19 @@ NUMBER_WIDTH = 4
 GUTTER_WIDTH = SIGN_WIDTH + NUMBER_WIDTH
 MARK_SIGN_NERD_FONT = "\uf02e"  # nf-fa-bookmark, present in Nerd Fonts v2 and v3
 MARK_SIGN_PLAIN = "\u25cf"  # ● renders in practically every font
+MISSING_SHADE = "\u2591"  # ░ fills a verse that one split pane's version leaves out
+
+# A split shows a second text pane beside (vertical) or below (horizontal) the first.
+SPLIT_VERTICAL = "vertical"
+SPLIT_HORIZONTAL = "horizontal"
+SPLITS = (SPLIT_VERTICAL, SPLIT_HORIZONTAL)
+MIN_PANE_WIDTH = GUTTER_WIDTH + 2 + 16  # Borders plus a readable line of text.
+MIN_PANE_HEIGHT = 5  # Borders plus three lines.
+
+# Version picker modes.
+PICK_VERSION = "version"  # Switch the only pane's version.
+PICK_NEW_PANE = "new_pane"  # Choose the version for a new split pane.
+PICK_PANES = "panes"  # Two columns, one per split pane.
 
 
 @dataclass(frozen=True)
@@ -71,6 +88,25 @@ class RenderLine:
     verse_number: str
     text: str
     start_col: int
+    missing: bool = False
+
+
+@dataclass(frozen=True)
+class MissingVerse(Verse):
+    """Stands in for a verse one split pane's version leaves out, so both panes keep the same rows."""
+
+    text: str = ""
+
+
+@dataclass
+class SplitPane:
+    """The second text pane. It shows the same chapter as the first in its own version."""
+
+    version: BibleVersion
+    store: BibleStore
+    books: dict[int, Book]  # By sort order, since book ids differ between databases.
+    verses: list[Verse] = field(default_factory=list)
+    all_verses: list[BibleVerse] | None = None
 
 
 @dataclass(frozen=True)
@@ -165,6 +201,16 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
         ),
     ),
     (
+        "Panes",
+        (
+            Command("split side by side", "ctrl+w v", "split_vertical"),
+            Command("split top and bottom", "ctrl+w s", "split_horizontal"),
+            Command("switch pane", "ctrl+w w / left / right", "switch_pane"),
+            Command("close pane", "ctrl+w q", "close_pane"),
+            Command("close other pane", "ctrl+w o", "close_other_pane"),
+        ),
+    ),
+    (
         "General",
         (
             Command("commands", "ctrl+p / ?", "commands"),
@@ -230,6 +276,7 @@ class BibleTui:
         *,
         alphabetical: bool = False,
         on_version_change: Callable[[BibleVersion], None] | None = None,
+        on_split_change: Callable[[str | None, BibleVersion | None], None] | None = None,
         marks: MarkStore | None = None,
         highlights: HighlightStore | None = None,
         nerd_font: bool = False,
@@ -239,12 +286,19 @@ class BibleTui:
         self.version = version
         self.versions: tuple[BibleVersion, ...] = tuple(versions) or (version,)
         self.on_version_change = on_version_change
+        self.on_split_change = on_split_change
         self.marks = marks if marks is not None else MarkStore(None)
         self.highlights = highlights if highlights is not None else HighlightStore(None)
         self.mark_sign = MARK_SIGN_NERD_FONT if nerd_font else MARK_SIGN_PLAIN
         self.version_modal_open = False
-        self.version_cursor = 0
-        self.version_scroll = 0
+        self.version_mode = PICK_VERSION
+        self.version_column = 0  # The picker column (split pane) the cursor is in.
+        self.version_cursors = [0, 0]
+        self.version_scrolls = [0, 0]
+        self.new_pane_split = SPLIT_VERTICAL  # Orientation waiting on the PICK_NEW_PANE choice.
+        self.split: str | None = None  # SPLIT_VERTICAL or SPLIT_HORIZONTAL while split.
+        self.split_pane: SplitPane | None = None
+        self.active_pane = 0  # The text pane that gets visual mode, yank, and search.
         self.alphabetical = alphabetical
         self.books = store.books(self.alphabetical)
         self.book_rows: tuple[tuple[str, object], ...] = ()
@@ -268,11 +322,13 @@ class BibleTui:
         self.visual_anchor: tuple[int, int] | None = None
         self.pending_y = False
         self.pending_g = False
+        self.pending_w = False
         self.message = ""
         self.command_modal_open = False
         self.command_cursor = 0
         self.command_scroll = 0
         self.search_scope: int | None = None
+        self.search_pane = 0  # The text pane a text search looks in.
         self.search_query = ""
         self.search_input_active = False
         self.search_result_cursor = 0
@@ -299,6 +355,11 @@ class BibleTui:
         self.last_highlight_color = HIGHLIGHT_COLORS[0]
         if self.books:
             self.select_book(self.book_cursor)
+
+    def close(self) -> None:
+        self.store.close()
+        if self.split_pane is not None:
+            self.split_pane.store.close()
 
     def run(self) -> None:
         self.set_cursor_visibility(False)
@@ -367,6 +428,15 @@ class BibleTui:
             return True
         pending_g = self.pending_g
         self.pending_g = False
+        if self.pending_w:
+            self.pending_w = False
+            self.handle_window_key(key)
+            return True
+        if key == KEY_CTRL_W:
+            self.pending_y = False
+            self.pending_w = True
+            self.message = "ctrl+w: v side by side, s top and bottom, w switch, q close, o close other"
+            return True
         if key in (KEY_CTRL_P, ord("?")):
             self.open_command_modal()
             return True
@@ -494,6 +564,27 @@ class BibleTui:
         self.pending_y = False
         return True
 
+    def handle_window_key(self, key: int) -> None:
+        """The key after ``ctrl+w``, as in Vim's window commands."""
+        self.message = ""
+        if key in (ord("v"), KEY_CTRL_V):
+            self.open_split_picker(SPLIT_VERTICAL)
+        elif key in (ord("s"), ord("S"), KEY_CTRL_S):
+            self.open_split_picker(SPLIT_HORIZONTAL)
+        elif key in (ord("q"), ord("c"), KEY_CTRL_Q):
+            self.close_pane(self.active_pane)
+        elif key in (ord("o"), KEY_CTRL_O):
+            if self.split_pane is None:
+                self.message = "already only one pane"
+            else:
+                self.close_pane(1 - self.active_pane)
+        elif key in (ord("w"), KEY_CTRL_W, ord("p")):
+            self.focus_pane(1 - self.active_pane if self.focus == FOCUS_TEXT else self.active_pane)
+        elif key in (ord("h"), ord("k"), curses.KEY_LEFT, curses.KEY_UP):
+            self.focus_pane(0)
+        elif key in (ord("l"), ord("j"), curses.KEY_RIGHT, curses.KEY_DOWN):
+            self.focus_pane(1 if self.split_pane is not None else 0)
+
     def handle_command_modal_key(self, key: int) -> bool:
         if key in (27, ord("?")):
             self.close_command_modal()
@@ -581,6 +672,16 @@ class BibleTui:
             self.toggle_book_order()
         elif action == "switch_version":
             self.open_version_modal()
+        elif action == "split_vertical":
+            self.open_split_picker(SPLIT_VERTICAL)
+        elif action == "split_horizontal":
+            self.open_split_picker(SPLIT_HORIZONTAL)
+        elif action == "switch_pane":
+            self.handle_window_key(ord("w"))
+        elif action == "close_pane":
+            self.close_pane(self.active_pane)
+        elif action == "close_other_pane":
+            self.handle_window_key(ord("o"))
         elif action in ("visual_mode", "visual_line_mode"):
             if self.focus == FOCUS_TEXT and self.verses:
                 self.toggle_visual_mode(line=action == "visual_line_mode")
@@ -596,7 +697,7 @@ class BibleTui:
                 self.message = "no visual selection"
         elif action == "yank_verse":
             if self.focus == FOCUS_TEXT and self.verses:
-                self.yank_to_clipboard(self.verses[self.verse_cursor].text, "verse")
+                self.yank_current_verse()
             else:
                 self.message = "no verse selected"
         return True
@@ -609,53 +710,126 @@ class BibleTui:
     def close_command_modal(self) -> None:
         self.command_modal_open = False
 
-    def open_version_modal(self) -> None:
+    @property
+    def version_cursor(self) -> int:
+        return self.version_cursors[self.version_column]
+
+    @version_cursor.setter
+    def version_cursor(self, value: int) -> None:
+        self.version_cursors[self.version_column] = value
+
+    def version_index(self, version: BibleVersion) -> int:
+        return next((index for index, item in enumerate(self.versions) if item == version), 0)
+
+    def prepare_version_modal(self) -> None:
         self.pending_y = False
         self.exit_visual_mode()
         self.command_modal_open = False
         self.search_input_active = False
         self.version_modal_open = True
-        self.version_cursor = next(
-            (index for index, version in enumerate(self.versions) if version == self.version),
-            0,
-        )
-        self.version_scroll = 0
-        self.ensure_version_visible()
+        self.version_scrolls = [0, 0]
         self.message = ""
+
+    def open_version_modal(self) -> None:
+        self.prepare_version_modal()
+        if self.split_pane is not None:
+            self.version_mode = PICK_PANES
+            self.version_cursors = [self.version_index(self.version), self.version_index(self.split_pane.version)]
+            self.version_column = self.active_pane
+        else:
+            self.version_mode = PICK_VERSION
+            self.version_cursors = [self.version_index(self.version), 0]
+            self.version_column = 0
+        for column in (0, 1):
+            self.ensure_version_visible(column)
+
+    def open_split_picker(self, split: str) -> None:
+        """Start a split: the version picker chooses the new pane's version."""
+        if self.split_pane is not None:
+            self.message = "2 panes max"
+            return
+        _, _, content_h, _, _, text_w = self.layout()
+        if split == SPLIT_VERTICAL and text_w < 2 * MIN_PANE_WIDTH:
+            self.message = "terminal too narrow to split side by side"
+            return
+        if split == SPLIT_HORIZONTAL and content_h < 2 * MIN_PANE_HEIGHT:
+            self.message = "terminal too short to split top and bottom"
+            return
+        self.prepare_version_modal()
+        self.version_mode = PICK_NEW_PANE
+        self.new_pane_split = split
+        self.version_column = 0
+        # Usually you split to compare, so start on a different version.
+        other = next((index for index, item in enumerate(self.versions) if item != self.version), None)
+        self.version_cursors = [self.version_index(self.version) if other is None else other, 0]
+        self.ensure_version_visible(0)
 
     def close_version_modal(self) -> None:
         self.version_modal_open = False
+        self.version_mode = PICK_VERSION
+        self.version_column = 0
 
     def handle_version_modal_key(self, key: int) -> bool:
         if key in (27, ord("t")):
             self.close_version_modal()
             return True
+        if self.version_mode == PICK_PANES and key in (
+            curses.KEY_LEFT, curses.KEY_RIGHT, ord("h"), ord("l"), KEY_TAB, curses.KEY_BTAB
+        ):
+            if key in (curses.KEY_LEFT, ord("h")):
+                self.version_column = 0
+            elif key in (curses.KEY_RIGHT, ord("l")):
+                self.version_column = 1
+            else:
+                self.version_column = 1 - self.version_column
+            return True
         if key in (curses.KEY_UP, ord("k")):
             self.version_cursor = clamp(self.version_cursor - 1, 0, len(self.versions) - 1)
-            self.ensure_version_visible()
+            self.ensure_version_visible(self.version_column)
             return True
         if key in (curses.KEY_DOWN, ord("j")):
             self.version_cursor = clamp(self.version_cursor + 1, 0, len(self.versions) - 1)
-            self.ensure_version_visible()
+            self.ensure_version_visible(self.version_column)
             return True
         if key in (ord("\n"), curses.KEY_ENTER, 10, 13):
+            mode = self.version_mode
+            first, second = (self.versions[cursor] for cursor in self.version_cursors)
             self.close_version_modal()
-            self.switch_version(self.versions[self.version_cursor])
+            if mode == PICK_NEW_PANE:
+                self.open_split(self.new_pane_split, first)
+            elif mode == PICK_PANES:
+                messages = []
+                # The second pane first: switching the first restores the place against it.
+                if self.split_pane is not None and second != self.split_pane.version:
+                    self.switch_split_version(second)
+                    messages.append(self.message)
+                if first != self.version:
+                    self.switch_version(first)
+                    messages.append(self.message)
+                self.message = "; ".join(messages)
+            else:
+                self.switch_version(first)
             return True
         return True
 
-    def ensure_version_visible(self) -> None:
-        self.version_scroll = scroll_to_cursor(
-            self.version_cursor,
-            self.version_scroll,
+    def ensure_version_visible(self, column: int) -> None:
+        self.version_scrolls[column] = scroll_to_cursor(
+            self.version_cursors[column],
+            self.version_scrolls[column],
             self.version_visible_rows(),
         )
 
     def version_visible_rows(self) -> int:
         height, _ = self.stdscr.getmaxyx()
-        return min(len(self.versions), max(1, height - 6))
+        extra = 2 if self.version_mode == PICK_PANES else 0  # Column headings and hints.
+        return min(len(self.versions), max(1, height - 6 - extra))
 
-    def switch_version(self, version: BibleVersion) -> None:
+    def switch_version(
+        self,
+        version: BibleVersion,
+        position: tuple[int | None, int | None, int | None] | None = None,
+    ) -> None:
+        """Change the first (or only) pane's version. It also supplies the book and chapter lists."""
         if version == self.version:
             return
         try:
@@ -665,7 +839,8 @@ class BibleTui:
             self.message = f"could not open {version.name}: {error}"
             return
 
-        position = self.current_position()
+        if position is None:
+            position = self.current_position()
         focus = self.focus
         self.store.close()
         self.store = store
@@ -685,6 +860,151 @@ class BibleTui:
             except OSError:
                 self.message = f"switched to {version.name} (could not save state)"
 
+    def open_split_pane(self, version: BibleVersion) -> SplitPane | None:
+        try:
+            store = BibleStore(version.path)
+            books = {book.sort_order: book for book in store.books(False)}
+        except sqlite3.Error as error:
+            self.message = f"could not open {version.name}: {error}"
+            return None
+        return SplitPane(version, store, books)
+
+    def open_split(self, split: str, version: BibleVersion, *, restoring: bool = False) -> bool:
+        """Add the second text pane. ``restoring`` reopens a remembered split at launch: focus stays put
+        and nothing is saved."""
+        if self.split_pane is not None:
+            self.message = "2 panes max"
+            return False
+        pane = self.open_split_pane(version)
+        if pane is None:
+            return False
+        number = self.current_position()[2]
+        self.split = split
+        self.split_pane = pane
+        self.load_chapter_verses()
+        self.cursor_to_verse(number)
+        if not restoring:
+            self.focus_pane(1)
+            self.message = f"opened {version.name}"
+            self.notify_split_change()
+        self.ensure_visible()
+        return True
+
+    def switch_split_version(self, version: BibleVersion) -> None:
+        if self.split_pane is None or version == self.split_pane.version:
+            return
+        pane = self.open_split_pane(version)
+        if pane is None:
+            return
+        number = self.current_position()[2]
+        if self.search_scope == FOCUS_TEXT and self.search_pane == 1:
+            self.clear_search()
+        self.split_pane.store.close()
+        self.split_pane = pane
+        self.load_chapter_verses()
+        self.cursor_to_verse(number)
+        self.clamp_text_cursor()
+        self.ensure_visible()
+        self.message = f"switched to {version.name}"
+        self.notify_split_change()
+
+    def close_pane(self, index: int) -> None:
+        """Close a split pane. Closing the first pane hands its place to the second pane's version."""
+        if self.split_pane is None:
+            self.message = "only one pane: q quits"
+            return
+        position = self.current_position()
+        kept = self.split_pane.version
+        self.exit_visual_mode()
+        if self.search_scope == FOCUS_TEXT:
+            self.clear_search()
+        self.split_pane.store.close()
+        self.split_pane = None
+        self.split = None
+        self.active_pane = 0
+        self.load_chapter_verses()
+        self.cursor_to_verse(position[2])
+        self.clamp_text_cursor()
+        if index == 0 and kept != self.version:
+            self.switch_version(kept, position)
+        self.ensure_visible()
+        self.notify_split_change()
+        if index == 0:
+            self.message = f"closed pane; showing {self.version.name}"
+        else:
+            self.message = "closed pane"
+
+    def notify_split_change(self) -> None:
+        if self.on_split_change is None:
+            return
+        try:
+            self.on_split_change(self.split, self.split_pane.version if self.split_pane else None)
+        except OSError:
+            self.message = f"{self.message} (could not save state)"
+
+    def focus_pane(self, index: int) -> None:
+        """Move focus to a text pane (0 is the left or top pane)."""
+        if not self.verses:
+            self.message = "select a chapter first"
+            return
+        index = index if self.split_pane is not None else 0
+        if index != self.active_pane:
+            self.exit_visual_mode()
+            self.active_pane = index
+        self.pending_y = False
+        self.focus = FOCUS_TEXT
+        self.clamp_text_cursor()
+        self.ensure_visible()
+
+    def pane_verses(self, index: int) -> list[Verse]:
+        if index == 1 and self.split_pane is not None:
+            return self.split_pane.verses
+        return self.verses
+
+    @property
+    def active_verses(self) -> list[Verse]:
+        """The focused text pane's verses. Both panes have the same rows, so only the text differs."""
+        return self.pane_verses(self.active_pane)
+
+    def pane_version(self, index: int) -> BibleVersion:
+        if index == 1 and self.split_pane is not None:
+            return self.split_pane.version
+        return self.version
+
+    def load_chapter_verses(self) -> None:
+        """Load the selected chapter into each pane, lined up by verse number when split."""
+        if self.selected_book is None or self.selected_chapter is None:
+            self.verses = []
+            if self.split_pane is not None:
+                self.split_pane.verses = []
+            return
+        primary = self.store.verses(self.selected_book.id, self.selected_chapter)
+        if self.split_pane is None:
+            self.verses = primary
+            return
+        book = self.split_pane.books.get(self.selected_book.sort_order)
+        secondary = self.split_pane.store.verses(book.id, self.selected_chapter) if book else []
+        self.verses, self.split_pane.verses = align_verses(primary, secondary)
+
+    def cursor_to_verse(self, number: int | None) -> None:
+        """Put the verse cursor on a verse number, or the nearest earlier verse."""
+        if number is None or not self.verses:
+            self.verse_cursor = 0
+            return
+        self.verse_cursor = max(
+            (index for index, item in enumerate(self.verses) if item.number <= number),
+            default=0,
+        )
+
+    def clamp_text_cursor(self) -> None:
+        verses = self.active_verses
+        if not verses:
+            self.text_cursor_col = 0
+            return
+        self.verse_cursor = clamp(self.verse_cursor, 0, len(verses) - 1)
+        max_col = max(0, len(verses[self.verse_cursor].text) - 1)
+        self.text_cursor_col = clamp(self.text_cursor_col, 0, max_col)
+
     def current_position(self) -> tuple[int | None, int | None, int | None]:
         """The current place as (book sort order, chapter, verse), which carries across versions."""
         book_order = self.selected_book.sort_order if self.selected_book else None
@@ -697,8 +1017,8 @@ class BibleTui:
         self.book_scroll = 0
         self.selected_book = None
         self.chapters = []
-        self.verses = []
         self.selected_chapter = None
+        self.load_chapter_verses()
         if not self.books:
             return
         book_index = next(
@@ -713,10 +1033,7 @@ class BibleTui:
         self.select_chapter(self.chapter_cursor)
         if verse is not None and self.verses:
             # A verse this version leaves out lands on the nearest earlier verse.
-            self.verse_cursor = max(
-                (index for index, item in enumerate(self.verses) if item.number <= verse),
-                default=0,
-            )
+            self.cursor_to_verse(verse)
 
     def open_list_modal(self, kind: str) -> None:
         self.pending_y = False
@@ -813,17 +1130,19 @@ class BibleTui:
         )
         return verse.text if verse else None
 
-    def jump_to_key(self, key: VerseKey) -> None:
+    def jump_to_key(self, key: VerseKey) -> bool:
         book = self.key_book(key)
         if book is None or key[1] not in self.store.chapters(book.id):
             self.message = f"{self.verse_reference(key)} is not in {self.version.name}"
-            return
+            return False
         self.restore_position(key)
         self.text_cursor_col = 0
         self.focus = FOCUS_TEXT
+        self.clamp_text_cursor()
         self.clear_search()
         self.message = f"selected {self.location_label()}"
         self.ensure_visible()
+        return True
 
     def open_highlight_picker(self) -> None:
         if self.focus != FOCUS_TEXT or not self.verses:
@@ -892,8 +1211,7 @@ class BibleTui:
         self.exit_visual_mode()
         self.command_modal_open = False
         self.search_input_active = False
-        if self.all_verses is None:
-            self.all_verses = self.store.all_verses()
+        self.fuzzy_verses()
         self.fuzzy_open = True
         self.fuzzy_help_open = False
         self.fuzzy_query = ""
@@ -1083,6 +1401,7 @@ class BibleTui:
         )
         self.text_cursor_col = 0
         self.focus = FOCUS_TEXT
+        self.clamp_text_cursor()
         self.clear_search()
         self.message = f"selected {book.name} {chapter}:{verse}"
         self.ensure_visible()
@@ -1133,11 +1452,19 @@ class BibleTui:
             return True
         return True
 
-    def refresh_fuzzy_matches(self) -> None:
+    def fuzzy_verses(self) -> list[BibleVerse]:
+        """Every verse of the focused pane's version, loaded once per version."""
+        if self.active_pane == 1 and self.split_pane is not None:
+            if self.split_pane.all_verses is None:
+                self.split_pane.all_verses = self.split_pane.store.all_verses()
+            return self.split_pane.all_verses
         if self.all_verses is None:
             self.all_verses = self.store.all_verses()
+        return self.all_verses
+
+    def refresh_fuzzy_matches(self) -> None:
         self.fuzzy_matches = (
-            build_fuzzy_matches(self.all_verses, self.fuzzy_query)
+            build_fuzzy_matches(self.fuzzy_verses(), self.fuzzy_query)
             if self.fuzzy_query
             else []
         )
@@ -1163,33 +1490,9 @@ class BibleTui:
         return max(1, self.fuzzy_modal_geometry(height, self.stdscr.getmaxyx()[1])[2] - 3)
 
     def jump_to_bible_verse(self, selected: BibleVerse) -> None:
-        book_index = next(
-            (index for index, book in enumerate(self.books) if book.id == selected.book_id),
-            0,
-        )
-        self.select_book(book_index)
-        chapter_index = next(
-            (
-                index
-                for index, chapter in enumerate(self.chapters)
-                if chapter == selected.chapter_number
-            ),
-            0,
-        )
-        self.select_chapter(chapter_index)
-        self.verse_cursor = next(
-            (
-                index
-                for index, verse in enumerate(self.verses)
-                if verse.number == selected.verse_number
-            ),
-            0,
-        )
-        self.text_cursor_col = 0
-        self.focus = FOCUS_TEXT
-        self.clear_search()
-        self.message = f"selected {selected.full_reference}"
-        self.ensure_visible()
+        # By sort order: the verse may come from the second pane's database, whose book ids differ.
+        if self.jump_to_key((selected.book_order, selected.chapter_number, selected.verse_number)):
+            self.message = f"selected {selected.full_reference}"
 
     def activate_selection(self) -> None:
         if (
@@ -1217,10 +1520,19 @@ class BibleTui:
             self.select_chapter(self.chapter_cursor)
 
     def move_focus_left(self) -> None:
+        if self.focus == FOCUS_TEXT and self.active_pane == 1:
+            self.focus_pane(0)
+            return
         self.focus = max(FOCUS_BOOKS, self.focus - 1)
         self.ensure_visible()
 
     def move_focus_right(self) -> None:
+        if self.focus == FOCUS_TEXT and self.split_pane is not None and self.active_pane == 0:
+            self.focus_pane(1)
+            return
+        if self.focus == FOCUS_CHAPTERS and self.active_pane != 0:
+            self.exit_visual_mode()
+            self.active_pane = 0  # Coming in from the left lands in the left (or top) pane.
         if self.focus == FOCUS_BOOKS:
             if self.books:
                 self.ensure_cursor_book_selected()
@@ -1259,6 +1571,7 @@ class BibleTui:
             return
         self.pending_y = False
         self.search_scope = self.focus
+        self.search_pane = self.active_pane
         self.search_query = ""
         self.search_input_active = True
         self.message = ""
@@ -1311,7 +1624,7 @@ class BibleTui:
         if self.search_scope == FOCUS_BOOKS:
             self.focus = FOCUS_BOOKS
         elif self.search_scope == FOCUS_TEXT:
-            self.focus = FOCUS_TEXT
+            self.focus_pane(self.search_pane)
         self.move_to_search_result(results[self.search_result_cursor])
         self.message = ""
         self.ensure_visible()
@@ -1359,7 +1672,7 @@ class BibleTui:
             ]
         if self.search_scope == FOCUS_TEXT:
             results: list[SearchResult] = []
-            for verse_index, verse in enumerate(self.verses):
+            for verse_index, verse in enumerate(self.pane_verses(self.search_pane)):
                 results.extend(
                     SearchResult(verse_index, start_col, end_col)
                     for start_col, end_col in match_spans(verse.text, self.search_query)
@@ -1373,20 +1686,16 @@ class BibleTui:
     def book_is_search_match(self, index: int) -> bool:
         return self.search_scope == FOCUS_BOOKS and index in self.current_search_matches()
 
-    def first_verse_match_col(self, verse_index: int) -> int:
-        if not self.search_query or not (0 <= verse_index < len(self.verses)):
-            return 0
-        spans = match_spans(self.verses[verse_index].text, self.search_query)
-        return spans[0][0] if spans else 0
-
-    def search_match_spans(self, verse_index: int) -> list[tuple[int, int]]:
+    def search_match_spans(self, verse_index: int, pane: int = 0) -> list[tuple[int, int]]:
+        verses = self.pane_verses(pane)
         if (
             self.search_scope != FOCUS_TEXT
+            or pane != self.search_pane
             or not self.search_query
-            or not (0 <= verse_index < len(self.verses))
+            or not (0 <= verse_index < len(verses))
         ):
             return []
-        return match_spans(self.verses[verse_index].text, self.search_query)
+        return match_spans(verses[verse_index].text, self.search_query)
 
     def col_is_in_spans(self, col: int, spans: list[tuple[int, int]]) -> bool:
         return any(start <= col < end for start, end in spans)
@@ -1399,7 +1708,7 @@ class BibleTui:
             self.exit_visual_mode()
             return
         if self.pending_y:
-            self.yank_to_clipboard(self.verses[self.verse_cursor].text, "verse")
+            self.yank_current_verse()
             self.pending_y = False
             return
         self.pending_y = True
@@ -1462,6 +1771,13 @@ class BibleTui:
         self.visual_line = False
         self.visual_anchor = None
 
+    def yank_current_verse(self) -> None:
+        verse = self.active_verses[self.verse_cursor]
+        if isinstance(verse, MissingVerse):
+            self.message = f"{self.location_label()} is not in {self.pane_version(self.active_pane).name}"
+            return
+        self.yank_to_clipboard(verse.text, "verse")
+
     def yank_to_clipboard(self, text: str, label: str) -> None:
         if not copy_to_clipboard(text):
             self.message = "clipboard unavailable"
@@ -1471,37 +1787,38 @@ class BibleTui:
     def move_text_cursor(self, delta: int) -> None:
         if not self.verses:
             return
-        max_col = max(0, len(self.verses[self.verse_cursor].text) - 1)
+        max_col = max(0, len(self.active_verses[self.verse_cursor].text) - 1)
         self.text_cursor_col = clamp(self.text_cursor_col + delta, 0, max_col)
         self.ensure_visible()
 
     def move_to_verse_edge(self, end: bool) -> None:
         if not self.verses:
             return
-        self.text_cursor_col = max(0, len(self.verses[self.verse_cursor].text) - 1) if end else 0
+        self.text_cursor_col = max(0, len(self.active_verses[self.verse_cursor].text) - 1) if end else 0
         self.ensure_visible()
 
     def move_word(self, motion: str) -> None:
         """Vim ``w``/``b``/``e``: move by word, continuing into the next or previous verse."""
-        if not self.verses:
+        verses = self.active_verses
+        if not verses:
             return
         col = self.text_cursor_col
-        spans = word_spans(self.verses[self.verse_cursor].text)
+        spans = word_spans(verses[self.verse_cursor].text)
         target: tuple[int, int] | None = None
         if motion == "w":
             target = next(((self.verse_cursor, start) for start, _ in spans if start > col), None)
-            if target is None and self.verse_cursor + 1 < len(self.verses):
-                next_spans = word_spans(self.verses[self.verse_cursor + 1].text)
+            if target is None and self.verse_cursor + 1 < len(verses):
+                next_spans = word_spans(verses[self.verse_cursor + 1].text)
                 target = (self.verse_cursor + 1, next_spans[0][0] if next_spans else 0)
         elif motion == "b":
             target = next(((self.verse_cursor, start) for start, _ in reversed(spans) if start < col), None)
             if target is None and self.verse_cursor > 0:
-                previous_spans = word_spans(self.verses[self.verse_cursor - 1].text)
+                previous_spans = word_spans(verses[self.verse_cursor - 1].text)
                 target = (self.verse_cursor - 1, previous_spans[-1][0] if previous_spans else 0)
         elif motion == "e":
             target = next(((self.verse_cursor, end - 1) for _, end in spans if end - 1 > col), None)
-            if target is None and self.verse_cursor + 1 < len(self.verses):
-                next_spans = word_spans(self.verses[self.verse_cursor + 1].text)
+            if target is None and self.verse_cursor + 1 < len(verses):
+                next_spans = word_spans(verses[self.verse_cursor + 1].text)
                 target = (self.verse_cursor + 1, next_spans[0][1] - 1 if next_spans else 0)
         if target is None:
             return
@@ -1533,10 +1850,13 @@ class BibleTui:
 
     def cycle_focus(self, delta: int) -> None:
         if delta > 0 and self.focus == FOCUS_TEXT:
-            self.focus = FOCUS_BOOKS
+            if self.split_pane is not None and self.active_pane == 0:
+                self.focus_pane(1)
+            else:
+                self.focus = FOCUS_BOOKS
         elif delta < 0 and self.focus == FOCUS_BOOKS:
             if self.verses:
-                self.focus = FOCUS_TEXT
+                self.focus_pane(1)
         elif delta > 0:
             self.move_focus_right()
         else:
@@ -1547,7 +1867,7 @@ class BibleTui:
         if not self.verses:
             return
         self.verse_cursor = clamp(self.verse_cursor + delta, 0, len(self.verses) - 1)
-        max_col = max(0, len(self.verses[self.verse_cursor].text) - 1)
+        max_col = max(0, len(self.active_verses[self.verse_cursor].text) - 1)
         self.text_cursor_col = clamp(self.text_cursor_col, 0, max_col)
         self.ensure_visible()
 
@@ -1598,6 +1918,8 @@ class BibleTui:
 
     def page(self, direction: int, half: bool = False) -> None:
         _, _, content_h, _, _, _ = self.layout()
+        if self.focus == FOCUS_TEXT:
+            content_h = min(h for _, _, _, h, _ in self.text_pane_rects())
         page_size = max(1, (content_h - 2) // 2) if half else max(1, content_h - 4)
         if self.focus == FOCUS_BOOKS and self.books:
             self.book_cursor = clamp(
@@ -1651,15 +1973,15 @@ class BibleTui:
         if self.chapters:
             self.select_chapter(0)
         else:
-            self.verses = []
             self.selected_chapter = None
+            self.load_chapter_verses()
             self.exit_visual_mode()
 
     def select_chapter(self, index: int) -> None:
         if self.selected_book is None or not self.chapters:
             return
         self.selected_chapter = self.chapters[index]
-        self.verses = self.store.verses(self.selected_book.id, self.selected_chapter)
+        self.load_chapter_verses()
         self.text_scroll = 0
         self.verse_cursor = 0
         self.text_cursor_col = 0
@@ -1673,7 +1995,9 @@ class BibleTui:
         self.chapter_scroll = scroll_to_cursor(
             self.chapter_cursor, self.chapter_scroll, inner_h
         )
-        wrapped = self.wrapped_verses(max(1, self.layout()[5] - 2))
+        rects = self.text_pane_rects()
+        inner_h = max(1, min(h for _, _, _, h, _ in rects) - 2)
+        wrapped = next(iter(self.text_lines(rects).values()))  # Split panes share rows.
         if self.verses and wrapped:
             verse_rows = [
                 i for i, line in enumerate(wrapped) if line.verse_index == self.verse_cursor
@@ -1696,11 +2020,14 @@ class BibleTui:
             self.stdscr.refresh()
             return
 
-        top_y, content_y, content_h, book_w, chapter_w, text_w = self.layout()
+        top_y, content_y, content_h, book_w, chapter_w, _ = self.layout()
         self.draw_top_bar(top_y, width)
         self.draw_books(content_y, 0, content_h, book_w)
         self.draw_chapters(content_y, book_w, content_h, chapter_w)
-        self.draw_text(content_y, book_w + chapter_w, content_h, text_w)
+        rects = self.text_pane_rects()
+        lines = self.text_lines(rects)
+        for pane, pane_y, pane_x, pane_h, pane_w in rects:
+            self.draw_text(pane, pane_y, pane_x, pane_h, pane_w, lines[pane], hidden_pane=len(rects) < self.pane_count)
         self.draw_status(height - 1, width)
         if self.command_modal_open:
             self.draw_command_modal(height, width)
@@ -1726,7 +2053,7 @@ class BibleTui:
             else:
                 self.position_fuzzy_cursor(height, width)
         else:
-            self.position_terminal_cursor(content_y, book_w + chapter_w, content_h, text_w)
+            self.position_terminal_cursor(rects, lines)
         self.stdscr.refresh()
 
     def layout(self) -> tuple[int, int, int, int, int, int]:
@@ -1739,9 +2066,30 @@ class BibleTui:
         text_w = max(10, width - book_w - chapter_w)
         return top_y, content_y, content_h, book_w, chapter_w, text_w
 
+    @property
+    def pane_count(self) -> int:
+        return 1 if self.split_pane is None else 2
+
+    def text_pane_rects(self) -> list[tuple[int, int, int, int, int]]:
+        """(pane, y, x, height, width) for each text pane drawn. A split that no longer fits the
+        terminal shows only the focused pane until there is room again."""
+        _, content_y, content_h, book_w, chapter_w, text_w = self.layout()
+        x = book_w + chapter_w
+        if self.split_pane is None:
+            return [(0, content_y, x, content_h, text_w)]
+        if self.split == SPLIT_VERTICAL and text_w >= 2 * MIN_PANE_WIDTH:
+            left_w = text_w // 2
+            return [(0, content_y, x, content_h, left_w), (1, content_y, x + left_w, content_h, text_w - left_w)]
+        if self.split == SPLIT_HORIZONTAL and content_h >= 2 * MIN_PANE_HEIGHT:
+            top_h = content_h // 2
+            return [(0, content_y, x, top_h, text_w), (1, content_y + top_h, x, content_h - top_h, text_w)]
+        return [(self.active_pane, content_y, x, content_h, text_w)]
+
     def draw_top_bar(self, y: int, width: int) -> None:
         order = "A-Z" if self.alphabetical else "Bible order"
-        title = f" Bible TUI | {self.version.name} | {order} "
+        # Split panes name their versions in their own titles.
+        version = "" if self.split_pane is not None else f"{self.version.name} | "
+        title = f" Bible TUI | {version}{order} "
         self.add_screen_line(y, title, width)
 
     def draw_books(self, y: int, x: int, h: int, w: int) -> None:
@@ -1789,15 +2137,34 @@ class BibleTui:
             win.addnstr(row + 1, 1, f"{chapter:^5}", 5, attr)
         self.draw_scrollbar(win, len(self.chapters), self.chapter_scroll, inner_h)
 
-    def draw_text(self, y: int, x: int, h: int, w: int) -> None:
+    def draw_text(
+        self,
+        pane: int,
+        y: int,
+        x: int,
+        h: int,
+        w: int,
+        lines: list[RenderLine],
+        *,
+        hidden_pane: bool = False,
+    ) -> None:
         win = self.stdscr.derwin(h, w, y, x)
-        title = "Text"
+        chapter = "Text"
         if self.selected_book and self.selected_chapter:
-            title = f"{self.selected_book.name} {self.selected_chapter}"
-        self.draw_box(win, title, self.focus == FOCUS_TEXT)
+            chapter = f"{self.selected_book.name} {self.selected_chapter}"
+        title = chapter
+        if self.split_pane is not None:
+            title = f"{self.pane_version(pane).name} | {chapter}"
+            if hidden_pane:
+                title = f"{title} | other pane hidden: terminal too small"
+        self.draw_box(win, title, self.focus == FOCUS_TEXT and pane == self.active_pane)
         inner_h = max(0, h - 2)
         inner_w = max(0, w - 2)
-        lines = self.wrapped_verses(inner_w)
+        verses = self.pane_verses(pane)
+        if verses and all(isinstance(verse, MissingVerse) for verse in verses):
+            note = f"{chapter} is not in {self.pane_version(pane).name}"
+            win.addnstr(1, 2, note, max(0, inner_w - 2), curses.color_pair(4) | curses.A_DIM)
+            return
         for row, line in enumerate(lines[self.text_scroll : self.text_scroll + inner_h]):
             selected = self.verses and line.verse_index == self.verse_cursor
             if selected:
@@ -1805,6 +2172,13 @@ class BibleTui:
             else:
                 base_attr = 0
             win.addnstr(row + 1, 1, " " * inner_w, inner_w, base_attr)
+            if line.missing:
+                shade_attr = base_attr | curses.A_DIM if selected else curses.color_pair(4) | curses.A_DIM
+                if line.verse_number:
+                    win.addnstr(row + 1, 1 + SIGN_WIDTH, line.verse_number, NUMBER_WIDTH, shade_attr)
+                shade_w = max(0, inner_w - GUTTER_WIDTH - 1)
+                win.addnstr(row + 1, 1 + GUTTER_WIDTH, MISSING_SHADE * shade_w, shade_w, shade_attr)
+                continue
             if line.verse_number:
                 key = self.verse_key(line.verse_index)
                 if key is not None and self.marks.is_marked(key):
@@ -1813,7 +2187,7 @@ class BibleTui:
                 number_attr = base_attr | curses.A_BOLD if selected else curses.color_pair(3) | curses.A_BOLD
                 win.addnstr(row + 1, 1 + SIGN_WIDTH, line.verse_number, NUMBER_WIDTH, number_attr)
             self.draw_text_segment(
-                win, row + 1, 1 + GUTTER_WIDTH, line, max(0, inner_w - GUTTER_WIDTH), base_attr
+                win, row + 1, 1 + GUTTER_WIDTH, line, max(0, inner_w - GUTTER_WIDTH), base_attr, pane
             )
         self.draw_scrollbar(win, len(lines), self.text_scroll, inner_h)
 
@@ -1821,9 +2195,12 @@ class BibleTui:
         if self.search_scope is not None:
             self.draw_search_line(y, width)
             return
-        version = self.version.name
+        version = self.pane_version(self.active_pane).name
         location = self.location_label()
         focus = ("books", "chapters", "text")[self.focus]
+        if self.focus == FOCUS_TEXT and self.split_pane is not None:
+            sides = ("left", "right") if self.split == SPLIT_VERTICAL else ("top", "bottom")
+            focus = f"text ({sides[self.active_pane]})"
         status = f" {version} | {location} | focus: {focus} "
         if self.message:
             status = f"{status}| {self.message} "
@@ -1980,10 +2357,12 @@ class BibleTui:
             win.addnstr(row_y, key_x, command.keybind, max(0, modal_w - key_x - 2), key_attr)
 
     def draw_version_modal(self, height: int, width: int) -> None:
+        columns = 2 if self.version_mode == PICK_PANES else 1
         visible_rows = self.version_visible_rows()
         content_w = max(len(version.name) for version in self.versions)
-        modal_w = min(max(40, content_w + 10), max(20, width - 4))
-        modal_h = visible_rows + 2
+        column_w = content_w + 6
+        modal_w = min(max(40, column_w * columns + columns + 1), max(20, width - 4))
+        modal_h = visible_rows + 2 + (2 if columns == 2 else 0)
         y = max(1, (height - modal_h) // 2)
         x = max(0, (width - modal_w) // 2)
         win = self.stdscr.derwin(modal_h, modal_w, y, x)
@@ -1993,25 +2372,63 @@ class BibleTui:
         win.box()
         win.attroff(border_attr)
 
-        win.addnstr(0, 2, " Versions ", max(0, modal_w - 4), curses.color_pair(2) | curses.A_BOLD)
+        title = " Version for new pane " if self.version_mode == PICK_NEW_PANE else " Versions "
+        win.addnstr(0, 2, title, max(0, modal_w - 4), curses.color_pair(2) | curses.A_BOLD)
         esc = " esc "
-        if modal_w > len(esc) + 14:
+        if modal_w > len(title) + len(esc) + 6:
             win.addnstr(0, modal_w - len(esc) - 2, esc, len(esc), curses.color_pair(4))
 
-        inner_w = max(0, modal_w - 2)
-        for row, version in enumerate(
-            self.versions[self.version_scroll : self.version_scroll + visible_rows]
-        ):
-            index = self.version_scroll + row
-            selected = index == self.version_cursor
-            row_attr = curses.color_pair(1) if selected else 0
+        if columns == 1:
+            current = self.version if self.version_mode == PICK_VERSION else None
+            self.draw_version_column(win, 0, 1, 1, modal_w - 2, visible_rows, current, active=True)
+            self.draw_scrollbar(win, len(self.versions), self.version_scrolls[0], visible_rows)
+            return
+
+        inner_w = modal_w - 2
+        left_w = (inner_w - 1) // 2
+        divider_x = 1 + left_w
+        sides = ("Left", "Right") if self.split == SPLIT_VERTICAL else ("Top", "Bottom")
+        current_versions = (self.version, self.pane_version(1))
+        for column, (col_x, col_w) in enumerate(((1, left_w), (divider_x + 1, inner_w - left_w - 1))):
+            active = column == self.version_column
+            heading_attr = curses.color_pair(5) | curses.A_BOLD if active else curses.color_pair(4) | curses.A_DIM
+            win.addnstr(1, col_x + 1, f"{sides[column]} pane", max(0, col_w - 2), heading_attr)
+            self.draw_version_column(
+                win, column, 2, col_x, col_w, visible_rows, current_versions[column], active=active
+            )
+        for row in range(1, modal_h - 2):
+            win.addch(row, divider_x, curses.ACS_VLINE, curses.color_pair(4) | curses.A_DIM)
+        self.draw_modal_hints(
+            win, modal_h - 2, modal_w, (("left/right", "pane"), ("enter", "apply"), ("esc", "cancel"))
+        )
+
+    def draw_version_column(
+        self,
+        win: curses.window,
+        column: int,
+        top: int,
+        x: int,
+        w: int,
+        visible_rows: int,
+        current: BibleVersion | None,
+        *,
+        active: bool,
+    ) -> None:
+        """One list of versions. ``*`` marks the version the pane shows now. The other column's
+        choice stays visible, without the cursor color."""
+        scroll = self.version_scrolls[column]
+        for row, version in enumerate(self.versions[scroll : scroll + visible_rows]):
+            selected = scroll + row == self.version_cursors[column]
+            if selected:
+                row_attr = curses.color_pair(1) if active else curses.A_REVERSE
+            else:
+                row_attr = 0
             marker_attr = row_attr if selected else curses.color_pair(3) | curses.A_BOLD
             name_attr = row_attr if selected else curses.color_pair(2)
-            marker = "*" if version == self.version else " "
-            win.addnstr(row + 1, 1, " " * inner_w, inner_w, row_attr)
-            win.addnstr(row + 1, 2, marker, 1, marker_attr)
-            win.addnstr(row + 1, 4, version.name, max(0, modal_w - 6), name_attr)
-        self.draw_scrollbar(win, len(self.versions), self.version_scroll, visible_rows)
+            marker = "*" if version == current else " "
+            win.addnstr(top + row, x, " " * w, w, row_attr)
+            win.addnstr(top + row, x + 1, marker, 1, marker_attr)
+            win.addnstr(top + row, x + 3, version.name, max(0, w - 4), name_attr)
 
     def draw_list_modal(self, height: int, width: int) -> None:
         marks = self.list_kind == LIST_MARKS
@@ -2509,27 +2926,22 @@ class BibleTui:
                 if thumb_top <= y < thumb_top + thumb_h:
                     win.addch(y, col, curses.ACS_CKBOARD, curses.color_pair(2))
 
-    def wrapped_verses(self, width: int) -> list[RenderLine]:
-        if not self.verses:
-            return []
-        text_width = max(8, width - GUTTER_WIDTH)
-        lines: list[RenderLine] = []
-        for verse_index, verse in enumerate(self.verses):
-            wrapped = textwrap.wrap(
-                verse.text,
-                width=text_width,
-                replace_whitespace=True,
-                drop_whitespace=True,
-            ) or [""]
-            start_col = 0
-            lines.append(RenderLine(verse_index, f"{verse.number:>3} ", wrapped[0], start_col))
-            start_col += len(wrapped[0])
-            for continuation in wrapped[1:]:
-                if start_col < len(verse.text) and verse.text[start_col : start_col + 1] == " ":
-                    start_col += 1
-                lines.append(RenderLine(verse_index, "", continuation, start_col))
-                start_col += len(continuation)
-        return lines
+    def text_lines(self, rects: list[tuple[int, int, int, int, int]]) -> dict[int, list[RenderLine]]:
+        """Wrapped lines for each drawn pane. Split panes pad each verse to the taller side, so a verse
+        starts on the same row in both and they scroll together."""
+        widths = {pane: max(1, w - 2) for pane, _, _, _, w in rects}
+        result: dict[int, list[RenderLine]] = {pane: [] for pane in widths}
+        for verse_index in range(len(self.verses)):
+            blocks = {
+                pane: wrap_verse(verse_index, self.pane_verses(pane)[verse_index], max(8, width - GUTTER_WIDTH))
+                for pane, width in widths.items()
+            }
+            rows = max(len(block) for block in blocks.values())
+            for pane, block in blocks.items():
+                verse = self.pane_verses(pane)[verse_index]
+                filler = RenderLine(verse_index, "", "", len(verse.text), missing=block[0].missing)
+                result[pane].extend(block + [filler] * (rows - len(block)))
+        return result
 
     def draw_text_segment(
         self,
@@ -2539,11 +2951,12 @@ class BibleTui:
         line: RenderLine,
         width: int,
         base_attr: int,
+        pane: int = 0,
     ) -> None:
         if not line.text or width <= 0:
             return
-        selection = self.visual_selection_bounds()
-        search_spans = self.search_match_spans(line.verse_index)
+        selection = self.visual_selection_bounds() if pane == self.active_pane else None
+        search_spans = self.search_match_spans(line.verse_index, pane)
         key = self.verse_key(line.verse_index)
         highlight = self.highlight_attr(self.highlights.color(key) if key is not None else None)
         if highlight and base_attr:
@@ -2557,7 +2970,12 @@ class BibleTui:
                 attr = curses.color_pair(PAIR_SEARCH) | curses.A_BOLD
             win.addnstr(y, x + offset, char, 1, attr)
 
-    def position_terminal_cursor(self, content_y: int, text_x: int, content_h: int, text_w: int) -> None:
+    def position_terminal_cursor(
+        self,
+        rects: list[tuple[int, int, int, int, int]],
+        lines: dict[int, list[RenderLine]],
+    ) -> None:
+        rect = next((rect for rect in rects if rect[0] == self.active_pane), None)
         if (
             self.command_modal_open
             or self.version_modal_open
@@ -2566,17 +2984,20 @@ class BibleTui:
             or self.search_input_active
             or self.focus != FOCUS_TEXT
             or not self.verses
+            or rect is None
         ):
             self.set_cursor_visibility(False)
             return
-        lines = self.wrapped_verses(max(1, text_w - 2))
-        inner_h = max(0, content_h - 2)
-        for row, line in enumerate(lines[self.text_scroll : self.text_scroll + inner_h]):
+        _, pane_y, pane_x, pane_h, _ = rect
+        inner_h = max(0, pane_h - 2)
+        for row, line in enumerate(lines[self.active_pane][self.text_scroll : self.text_scroll + inner_h]):
+            if line.missing or (not line.text and not line.verse_number and line.start_col > 0):
+                continue  # Shading and padding rows hold no text.
             line_end = line.start_col + len(line.text)
             if line.verse_index == self.verse_cursor and line.start_col <= self.text_cursor_col <= max(line.start_col, line_end):
                 self.set_cursor_visibility(True)
                 col = min(max(0, self.text_cursor_col - line.start_col), max(0, len(line.text) - 1))
-                self.stdscr.move(content_y + row + 1, text_x + 1 + GUTTER_WIDTH + col)
+                self.stdscr.move(pane_y + row + 1, pane_x + 1 + GUTTER_WIDTH + col)
                 return
         self.set_cursor_visibility(False)
 
@@ -2610,7 +3031,7 @@ class BibleTui:
         current = (self.verse_cursor, self.text_cursor_col)
         start, end = sorted((self.visual_anchor, current))
         if self.visual_line:
-            last_col = max(0, len(self.verses[end[0]].text) - 1)
+            last_col = max(0, len(self.active_verses[end[0]].text) - 1)
             return (start[0], 0), (end[0], last_col)
         return start, end
 
@@ -2637,8 +3058,11 @@ class BibleTui:
             return ""
         start, end = selection
         chunks: list[str] = []
+        verses = self.active_verses
         for verse_index in range(start[0], end[0] + 1):
-            text = self.verses[verse_index].text
+            if isinstance(verses[verse_index], MissingVerse):
+                continue
+            text = verses[verse_index].text
             start_col = start[1] if verse_index == start[0] else 0
             end_col = end[1] if verse_index == end[0] else len(text) - 1
             chunks.append(text[start_col : end_col + 1])
@@ -2689,6 +3113,40 @@ def format_mark_time(created_at: str) -> str:
         return datetime.fromisoformat(created_at).astimezone().strftime("%Y-%m-%d %H:%M")
     except ValueError:
         return ""
+
+
+def wrap_verse(verse_index: int, verse: Verse, text_width: int) -> list[RenderLine]:
+    """A verse's wrapped lines; ``start_col`` maps each line back into the verse text."""
+    number = f"{verse.number:>3} "
+    if isinstance(verse, MissingVerse):
+        return [RenderLine(verse_index, number, "", 0, missing=True)]
+    wrapped = textwrap.wrap(
+        verse.text,
+        width=text_width,
+        replace_whitespace=True,
+        drop_whitespace=True,
+    ) or [""]
+    start_col = 0
+    lines = [RenderLine(verse_index, number, wrapped[0], start_col)]
+    start_col += len(wrapped[0])
+    for continuation in wrapped[1:]:
+        if start_col < len(verse.text) and verse.text[start_col : start_col + 1] == " ":
+            start_col += 1
+        lines.append(RenderLine(verse_index, "", continuation, start_col))
+        start_col += len(continuation)
+    return lines
+
+
+def align_verses(primary: list[Verse], secondary: list[Verse]) -> tuple[list[Verse], list[Verse]]:
+    """Give two versions of a chapter the same rows: every verse number either has, with a
+    ``MissingVerse`` where one leaves it out."""
+    first = {verse.number: verse for verse in primary}
+    second = {verse.number: verse for verse in secondary}
+    numbers = sorted(first.keys() | second.keys())
+    return (
+        [first.get(number) or MissingVerse(number) for number in numbers],
+        [second.get(number) or MissingVerse(number) for number in numbers],
+    )
 
 
 def clamp(value: int, low: int, high: int) -> int:

@@ -27,7 +27,7 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   in the file are kept, and drawn underlined.
 - `bible_tui/store.py` holds `BibleStore` (read-only queries for one version), the `Book`/`Verse`/`BibleVerse`
   models, and `BOOK_ABBREVIATIONS`.
-- `bible_tui/tui.py` is the curses UI (`BibleTui`) plus the pure search/fuzzy helpers.
+- `bible_tui/tui.py` is the curses UI (`BibleTui`) plus the pure search/fuzzy/alignment helpers.
 - `bible_tui/bibles/` holds the bundled databases (package data, so installs include them). They are copied
   unchanged from the separate converter project; don't edit them by hand.
 - `docs/configuration.md` covers the app home, `config.json`, `state.json`, the search path, and the
@@ -86,8 +86,9 @@ disabled.
 - Keybinding policy: every action must be reachable without Vim knowledge (arrows, Tab, Page Up/Down,
   Home/End, Enter, Esc). Vim keys are extra aliases, never the only way. Current aliases: `h`/`j`/`k`/`l`,
   `ctrl+u`/`ctrl+d` (half page), `ctrl+b`/`ctrl+f` (page), `gg`/`G`, `0`/`$`, `w`/`b`/`e`, `v`/`V`, `y`/`yy`,
-  `:` (go to), `'`/`` ` `` (marks list), `"` (highlights list), and `?` (commands). Don't add count prefixes, Vim-style lettered marks, jump
-  lists, `H`/`L`, or `ctrl+w` window commands. `M`/`C` are the plain-key marks/highlights lists (`M` is not Vim's middle-of-screen). Two-key sequences (`gg`, `yy`) use the `pending_g`/`pending_y` flags. `]`/`[` step chapters
+  `:` (go to), `'`/`` ` `` (marks list), `"` (highlights list), `?` (commands), and the `ctrl+w` split commands
+  (`v`, `s`, `w`, `h`/`j`/`k`/`l`, `q`/`c`, `o`). Don't add count prefixes, Vim-style lettered marks, jump
+  lists, `H`/`L`, or other `ctrl+w` window commands. `M`/`C` are the plain-key marks/highlights lists (`M` is not Vim's middle-of-screen). Two-key sequences (`gg`, `yy`, `ctrl+w x`) use the `pending_g`/`pending_y`/`pending_w` flags. `]`/`[` step chapters
   across books in Bible order even when the list is alphabetical. Moving focus right must not re-select the
   book or chapter already shown (`ensure_cursor_book_selected`), or you lose your place.
 - The text pane gutter is a 2-cell sign column followed by the 4-cell verse number (`SIGN_WIDTH`,
@@ -109,6 +110,19 @@ disabled.
 - `t` opens the version picker (also in `ctrl+p`). `BibleTui.switch_version` swaps the store, clears the
   per-version caches (`all_verses`, `goto_verse_cache`, active search), restores the position, and calls
   `on_version_change`. The CLI uses that callback to record `last_version` in `state.json`.
+- Splits: at most two text panes (`split` is `SPLIT_VERTICAL` or `SPLIT_HORIZONTAL`; a third is refused with
+  `2 panes max`). The first pane is the app's main state (`store`, `version`, `verses`) and supplies the books
+  and chapters lists. The second is a `SplitPane` that follows the same book (by `sort_order`, since book ids
+  differ between databases) and chapter. `load_chapter_verses` aligns both with `align_verses`, so both
+  `verses` lists have the same rows and `verse_cursor` is shared. A verse one side lacks is a `MissingVerse`
+  (empty text) drawn shaded with `MISSING_SHADE`. `text_lines` pads each verse to the taller pane so rows
+  line up and `text_scroll` is shared. `active_pane` picks the pane for visual mode, yank, `/` search
+  (`search_pane`), and fuzzy find; code that reads verse text uses `active_verses`, not `verses`. Left/Right
+  and Tab move between text panes; `h`/`l` stay character motions. Opening a split shows the version picker
+  in `PICK_NEW_PANE` mode; `t` while split uses `PICK_PANES` (two columns). Closing the first pane switches the
+  main version to the second pane's. A split that no longer fits the terminal draws only the focused pane
+  (`text_pane_rects`). `on_split_change` lets the CLI save `split`/`split_version` to `state.json`, only when
+  the `remember_split` setting is true; `remembered_split` restores it at launch.
 - Clipboard support tries `pbcopy`, `wl-copy`, `xclip`, `xsel`, then `clip.exe` (`copy_to_clipboard`). If none
   works, the status bar says `clipboard unavailable`.
 - Be careful with terminal sizing logic and bottom-right curses writes; `add_screen_line` intentionally avoids

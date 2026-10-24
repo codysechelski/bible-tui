@@ -112,6 +112,24 @@ def choose_version(
     return versions[0], warnings
 
 
+def remembered_split(
+    settings: Settings,
+    state: Mapping[str, object],
+    versions: Sequence[BibleVersion],
+) -> tuple[str, BibleVersion] | None:
+    """The split to reopen at launch, when ``remember_split`` is on and its version still exists."""
+    from bible_tui.tui import SPLITS
+
+    if not settings.remember_split:
+        return None
+    split = state.get("split")
+    abbreviation = state.get("split_version")
+    if split not in SPLITS or not isinstance(abbreviation, str):
+        return None
+    version = find_version(versions, abbreviation)
+    return (split, version) if version is not None else None
+
+
 def describe(path: Path) -> str:
     home = str(Path.home())
     text = str(path)
@@ -170,6 +188,17 @@ def run_tui(
         state["last_version"] = chosen.abbreviation
         save_state(home, state)
 
+    def remember_split(split: str | None, split_version: BibleVersion | None) -> None:
+        if not settings.remember_split:
+            return
+        if split is None or split_version is None:
+            state.pop("split", None)
+            state.pop("split_version", None)
+        else:
+            state["split"] = split
+            state["split_version"] = split_version.abbreviation
+        save_state(home, state)
+
     def run(stdscr: curses.window) -> None:
         app = BibleTui(
             stdscr,
@@ -178,16 +207,20 @@ def run_tui(
             versions,
             alphabetical=settings.book_order == "alphabetical",
             on_version_change=remember,
+            on_split_change=remember_split,
             marks=marks,
             highlights=highlights,
             nerd_font=settings.nerd_font,
         )
+        split = remembered_split(settings, state, versions)
+        if split is not None:
+            app.open_split(*split, restoring=True)
         if warnings:
             app.message = f"warning: {warnings[0]}"
         try:
             app.run()
         finally:
-            app.store.close()
+            app.close()
 
     curses.wrapper(run)
 
