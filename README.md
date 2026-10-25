@@ -1,9 +1,11 @@
 # bible-tui
 
-[![Release](https://img.shields.io/github/v/release/codysechelski/bible-tui?sort=semver)](https://github.com/codysechelski/bible-tui/releases)
-[![CI](https://github.com/codysechelski/bible-tui/actions/workflows/release.yml/badge.svg)](https://github.com/codysechelski/bible-tui/actions/workflows/release.yml)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](pyproject.toml)
-[![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen)](pyproject.toml)
+<p align="center">
+  <a href="https://github.com/codysechelski/bible-tui/releases"><img alt="Release" src="https://img.shields.io/github/v/release/codysechelski/bible-tui?sort=semver"></a>
+  <a href="https://github.com/codysechelski/bible-tui/actions/workflows/release.yml"><img alt="CI" src="https://github.com/codysechelski/bible-tui/actions/workflows/release.yml/badge.svg"></a>
+  <a href="pyproject.toml"><img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue"></a>
+  <a href="pyproject.toml"><img alt="Dependencies: none" src="https://img.shields.io/badge/dependencies-none-brightgreen"></a>
+</p>
 
 A fast, dependency-free terminal Bible reader with Vim-style keys.
 
