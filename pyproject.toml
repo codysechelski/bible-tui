@@ -27,3 +27,21 @@ bible_tui = ["bibles/*.sqlite"]
 
 [tool.setuptools.dynamic]
 version = { attr = "bible_tui.__version__" }
+
+[tool.semantic_release]
+version_variables = ["bible_tui/__init__.py:__version__"]
+tag_format = "v{version}"
+commit_parser = "conventional"
+commit_message = "chore(release): {version}"
+# Stay on 0.x until we choose to cut 1.0.0: a breaking change bumps the minor version.
+allow_zero_version = true
+major_on_zero = false
+# Nothing to build; a release is the tag, the GitHub Release notes, and CHANGELOG.md.
+build_command = ""
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = ['''^chore\(release\):''']

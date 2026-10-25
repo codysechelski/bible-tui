@@ -14,6 +14,7 @@ from bible_tui.tui import (
     FOCUS_TEXT,
     KEY_CTRL_D,
     KEY_CTRL_F,
+    KEY_CTRL_G,
     KEY_CTRL_S,
     KEY_CTRL_U,
     KEY_TAB,
@@ -233,6 +234,8 @@ class KeybindingTest(unittest.TestCase):
         self.press("?")
         self.assertFalse(self.app.command_modal_open)
         self.press(":")
+        self.assertTrue(self.app.cmdline_active)
+        self.press(27, KEY_CTRL_G)
         self.assertTrue(self.app.goto_open)
         self.press(27, KEY_CTRL_S)
         self.assertTrue(self.app.fuzzy_open)

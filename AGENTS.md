@@ -47,6 +47,17 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 No linter or formatter is installed. Automated verification (`.agent/verification.json`) is intentionally
 disabled.
 
+## Releases
+
+- Releases are automatic. `.github/workflows/release.yml` runs the tests on every push and pull request. On
+  pushes to `main` it then runs python-semantic-release (config in `[tool.semantic_release]` in
+  `pyproject.toml`). That bumps `__version__` in `bible_tui/__init__.py`, updates `CHANGELOG.md`, commits
+  `chore(release): X.Y.Z`, tags `vX.Y.Z`, and creates a GitHub Release. There is no build step.
+- Commit messages must follow Conventional Commits, because they decide the version: `fix:` → patch,
+  `feat:` → minor, `!` or a `BREAKING CHANGE:` footer → minor while on 0.x (`major_on_zero = false`).
+  Other types (`docs:`, `chore:`, `test:`, `refactor:`) don't release.
+- Never edit `__version__`, `CHANGELOG.md`, or `v*` tags by hand.
+
 ## Design Rules
 
 - Python standard library only; keep Python 3.9 compatibility (`from __future__ import annotations` in every
@@ -75,19 +86,29 @@ disabled.
   arrow, or `l`.
 - Keybinding help lives in the `ctrl+p` commands modal, not in the top header. The footer prompt keeps
   `ctrl+p` white and `commands` in the dim footer gray.
+- Footer layout (`draw_status`), Vim-style: the mode (`-- VISUAL --`) on the left. The place info
+  (version, reference, focus) is right-aligned just before the `ctrl+p` hint, and the timed message sits
+  just left of the place info. Keep the left side free for modes.
+- `:` opens the footer command line (`cmdline_*`, `draw_cmdline`), with a completion menu above it.
+  `EX_COMMANDS` lists the commands; a command runs from any prefix at least as long as its `short`
+  abbreviation, like Vim. Anything else is parsed as a reference (`John 3:16`, `John 3`, `John`) through the
+  go-to helpers (`reference_suggestions`, `parse_goto_reference`). Tab accepts the highlighted completion.
+  Enter runs the line, but a completion chosen with arrows or `ctrl+n`/`ctrl+p` is taken first, and an
+  unfinished line takes one completion per Enter. Add new `:` commands to `EX_COMMANDS` and
+  `run_ex_command`.
 - Search is Vim-style in the books and text panes. `/` opens a footer command line and live search shows a
   match count. Enter accepts the query and leaves the search bar visible read-only with current/total match
   status. `/` edits the active search again, `n`/`N` jump through matches, and Esc clears highlighting. From the
-  chapters pane, `/` first selects the highlighted chapter and moves focus to text search. Only `q` exits the
-  TUI; Esc is for clearing/dismissing UI modes.
+  chapters pane, `/` first selects the highlighted chapter and moves focus to text search. Only `q` (and
+  `:q`) exits the TUI; Esc is for clearing/dismissing UI modes.
 - `ctrl+s` opens the native full-Bible fuzzy finder (`ctrl+s` again inside shows the query syntax). It must stay dependency-free and must not shell out to
   `fzf`. Results use common book abbreviations, an ellipsized snippet column, and a preview pane.
-- `ctrl+g` opens a go-to-reference modal for references like `John 3:16`. Autocomplete uses Tab to accept
-  suggestions and `ctrl+n` to cycle suggestions.
+- `ctrl+g` opens a go-to-reference modal for references like `John 3:16` (`:John 3:16` does the same from
+  the command line). Autocomplete uses Tab to accept suggestions and `ctrl+n` to cycle suggestions.
 - Keybinding policy: every action must be reachable without Vim knowledge (arrows, Tab, Page Up/Down,
   Home/End, Enter, Esc). Vim keys are extra aliases, never the only way. Current aliases: `h`/`j`/`k`/`l`,
   `ctrl+u`/`ctrl+d` (half page), `ctrl+b`/`ctrl+f` (page), `gg`/`G`, `0`/`$`, `w`/`b`/`e`, `v`/`V`, `y`/`yy`,
-  `:` (go to), `'`/`` ` `` (marks list), `"` (highlights list), `?` (commands), and the `ctrl+w` split commands
+  `:` (command line), `'`/`` ` `` (marks list), `"` (highlights list), `?` (commands), and the `ctrl+w` split commands
   (`v`, `s`, `w`, `h`/`j`/`k`/`l`, `q`/`c`, `o`). Don't add count prefixes, Vim-style lettered marks, jump
   lists, `H`/`L`, or other `ctrl+w` window commands. `M`/`C` are the plain-key marks/highlights lists (`M` is not Vim's middle-of-screen). Two-key sequences (`gg`, `yy`, `ctrl+w x`) use the `pending_g`/`pending_y`/`pending_w` flags. `]`/`[` step chapters
   across books in Bible order even when the list is alphabetical. Moving focus right must not re-select the
@@ -141,8 +162,10 @@ disabled.
 
 - After changing Python code, run the syntax check and the test suite.
 - Manual TUI behaviour still needs a real terminal check with `./bible-tui`. A tmux session
-  (`tmux new-session -d -x 110 -y 30 './bible-tui'`, then `send-keys` / `capture-pane -p`) works for scripted
-  checks.
+  (`tmux new-session -d -s bt-check -x 110 -y 30 './bible-tui'`, then `send-keys` / `capture-pane -p`) works for
+  scripted checks. Give the session a long, unique name and always target it exactly (`-t '=bt-check:'`).
+  When the agent itself runs inside tmux, an inexact `-t` can resolve to the agent's own pane, and the keys
+  get typed into the user's session.
 - When adding a bundled version, add it under `bible_tui/bibles/` and to the table in
   `docs/bible-databases.md`. If it's public domain, mention it in the README.
 - Keep this file updated as new conventions, commands, risks, or decisions come up.

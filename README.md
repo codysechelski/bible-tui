@@ -60,9 +60,28 @@ Neovim users get the usual alternatives too. `ctrl+p` (or `?`) lists them all in
 | Toggle Bible order / alphabetical | `a` | |
 | Search books or the chapter | `/`, then `n` / `N` for matches, Esc to clear | |
 | Fuzzy find across the whole Bible | `ctrl+s` (press again inside for the query syntax) | |
-| Go to a reference like `John 3:16` | `ctrl+g` | `:` |
+| Go to a reference like `John 3:16` | `ctrl+g` | `:John 3:16` |
 | Commands and key list | `ctrl+p` | `?` |
-| Quit | `q` | |
+| Quit | `q` | `:q` |
+
+### The `:` command line
+
+`:` opens a Vim-style command line in the footer. A menu above it suggests commands, book names, chapters,
+and verses as you type: Tab accepts the highlighted one, ↑ / ↓ or `ctrl+n` / `ctrl+p` move through them,
+Enter runs the line, and Esc cancels. Commands can be shortened like in Vim (`:q`, `:vs`).
+
+| Command | Does |
+| --- | --- |
+| `:John 3:16`, `:John 3`, `:John` | Go to a verse, or the start of a chapter or book |
+| `:q` / `:quit` | Quit (`:wq`, `:x`, and `:q!` work too) |
+| `:find [words]` | Open the fuzzy finder, searching for the words if given |
+| `:set version=ASV` | Switch the focused pane's version; `:set version` alone opens the picker |
+| `:vsplit` / `:split` | Split side by side / top and bottom |
+| `:close` / `:only` | Close the focused pane / the other pane |
+| `:marks` / `:highlights` | List marks / highlights |
+
+The footer shows the mode (such as `-- VISUAL --`) on the left. Your place (version, reference, and focused
+pane) is on the right, before the `ctrl+p` hint.
 
 In the text pane:
 
@@ -81,8 +100,8 @@ In the text pane:
 
 Copying uses the system clipboard. Marked verses show `●` in the column left of the verse number, or a
 bookmark icon if you set `"nerd_font": true` in `config.json` (which turns on a few other icons too).
-Messages about what an action did show in yellow in the footer (failures in red) and fade after a few
-seconds. Marks are saved and show in every version.
+Messages about what an action did show in yellow in the footer, just left of your place (failures in red),
+and fade after a few seconds. Marks are saved and show in every version.
 
 ### Comparing two versions
 

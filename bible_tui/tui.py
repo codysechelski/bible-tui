@@ -19,7 +19,7 @@ from bible_tui.config import DEFAULT_YANK_FORMAT
 from bible_tui.highlights import HIGHLIGHT_COLORS, HighlightError, HighlightStore
 from bible_tui.marks import MarkError, MarkStore, VerseKey
 from bible_tui.store import BOOK_ABBREVIATIONS, BibleStore, BibleVerse, Book, Verse
-from bible_tui.versions import BibleVersion
+from bible_tui.versions import BibleVersion, find_version
 
 FOCUS_BOOKS = 0
 FOCUS_CHAPTERS = 1
@@ -161,6 +161,39 @@ class FuzzyMatch:
     positions: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class ExCommand:
+    """A ``:`` command. Like Vim, it runs from any prefix at least as long as ``short`` (``:q``)."""
+
+    name: str
+    short: str
+    args: str
+    description: str
+    aliases: tuple[str, ...] = ()
+
+
+EX_COMMANDS: tuple[ExCommand, ...] = (
+    ExCommand("quit", "q", "", "quit bible-tui", ("q!", "qa", "qa!", "qall", "wq", "wq!", "x")),
+    ExCommand("find", "fin", "[words]", "fuzzy find across the Bible"),
+    ExCommand("set", "se", "version=<name>", "change the focused pane's version"),
+    ExCommand("vsplit", "vs", "", "split side by side"),
+    ExCommand("split", "sp", "", "split top and bottom"),
+    ExCommand("close", "clo", "", "close the focused pane"),
+    ExCommand("only", "on", "", "close the other pane"),
+    ExCommand("marks", "marks", "", "list marks"),
+    ExCommand("highlights", "hi", "", "list highlights"),
+)
+
+
+@dataclass(frozen=True)
+class Completion:
+    """A ``:`` command-line suggestion: Tab replaces the line with ``text``."""
+
+    text: str
+    label: str
+    description: str = ""
+
+
 COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
     (
         "Navigation",
@@ -196,7 +229,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
         (
             Command("search", "/", "search"),
             Command("fuzzy find", "ctrl+s", "fuzzy_find"),
-            Command("go to reference", "ctrl+g / :", "go_to_reference"),
+            Command("go to reference", "ctrl+g / :John 3:16", "go_to_reference"),
             Command("next match", "n", "next_match"),
             Command("previous match", "N", "previous_match"),
         ),
@@ -236,6 +269,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
         "General",
         (
             Command("commands", "ctrl+p / ?", "commands"),
+            Command("command line", ":", "command_line"),
             Command("quit", "q", "quit"),
         ),
     ),
@@ -355,6 +389,11 @@ class BibleTui:
         self.command_modal_open = False
         self.command_cursor = 0
         self.command_scroll = 0
+        self.cmdline_active = False  # The ":" command line in the footer.
+        self.cmdline_text = ""
+        self.cmdline_cursor = 0  # The highlighted completion.
+        self.cmdline_chosen = False  # True once arrows or ctrl+n/ctrl+p move through completions.
+        self.cmdline_scroll = 0
         self.search_scope: int | None = None
         self.search_pane = 0  # The text pane a text search looks in.
         self.search_query = ""
@@ -485,6 +524,8 @@ class BibleTui:
         if self.search_input_active:
             self.handle_search_input_key(key)
             return True
+        if self.cmdline_active:
+            return self.handle_cmdline_key(key)
         pending_g = self.pending_g
         self.pending_g = False
         if self.pending_w:
@@ -502,8 +543,11 @@ class BibleTui:
         if key == KEY_CTRL_S:
             self.open_fuzzy_finder()
             return True
-        if key in (KEY_CTRL_G, ord(":")):
+        if key == KEY_CTRL_G:
             self.open_goto_modal()
+            return True
+        if key == ord(":"):
+            self.open_cmdline()
             return True
         if key == 27:
             if self.search_scope is not None:
@@ -715,6 +759,8 @@ class BibleTui:
                 self.message = "select text to move the cursor"
         elif action == "commands":
             self.open_command_modal()
+        elif action == "command_line":
+            self.open_cmdline()
         elif action == "toggle_mark":
             self.toggle_mark()
         elif action == "list_marks":
@@ -1400,7 +1446,10 @@ class BibleTui:
         return None, query
 
     def goto_suggestions(self) -> list[str]:
-        query = self.goto_query
+        return self.reference_suggestions(self.goto_query)
+
+    def reference_suggestions(self, query: str) -> list[str]:
+        """Completions for a reference being typed: book names, then ``Book 3:``, then ``Book 3:16``."""
         book, rest = self.goto_book_and_rest(query.strip())
         if book is None:
             folded = query.strip().casefold()
@@ -1601,6 +1650,203 @@ class BibleTui:
                 self.ensure_cursor_chapter_selected()
             self.focus = FOCUS_TEXT
         self.ensure_visible()
+
+    def open_cmdline(self) -> None:
+        self.pending_y = False
+        self.exit_visual_mode()
+        self.cmdline_active = True
+        self.cmdline_text = ""
+        self.cmdline_cursor = 0
+        self.cmdline_chosen = False
+        self.cmdline_scroll = 0
+        self.message = ""
+
+    def close_cmdline(self) -> None:
+        self.cmdline_active = False
+        self.cmdline_text = ""
+        self.cmdline_cursor = 0
+        self.cmdline_scroll = 0
+
+    def handle_cmdline_key(self, key: int) -> bool:
+        if key == 27:
+            self.close_cmdline()
+            return True
+        if key in (ord("\n"), curses.KEY_ENTER, 10, 13):
+            return self.submit_cmdline()
+        completions = self.cmdline_completions()
+        if key in (KEY_TAB, curses.KEY_DOWN, KEY_CTRL_N, curses.KEY_UP, KEY_CTRL_P, curses.KEY_BTAB):
+            if not completions:
+                return True
+            if key == KEY_TAB:
+                self.accept_completion(completions)
+            else:
+                step = -1 if key in (curses.KEY_UP, KEY_CTRL_P, curses.KEY_BTAB) else 1
+                self.cmdline_cursor = (self.cmdline_cursor + step) % len(completions)
+                self.cmdline_chosen = True
+                self.cmdline_scroll = scroll_to_cursor(
+                    self.cmdline_cursor, self.cmdline_scroll, self.cmdline_visible_rows(len(completions))
+                )
+            return True
+        if key in (curses.KEY_BACKSPACE, 127, 8):
+            if not self.cmdline_text:
+                self.close_cmdline()  # Vim: backspace on an empty command line leaves it.
+                return True
+            self.cmdline_text = self.cmdline_text[:-1]
+        elif 32 <= key <= 126:
+            self.cmdline_text += chr(key)
+        else:
+            return True
+        self.cmdline_cursor = 0
+        self.cmdline_chosen = False
+        self.cmdline_scroll = 0
+        return True
+
+    def accept_completion(self, completions: list[Completion]) -> None:
+        self.cmdline_text = completions[clamp(self.cmdline_cursor, 0, len(completions) - 1)].text
+        self.cmdline_cursor = 0
+        self.cmdline_chosen = False
+        self.cmdline_scroll = 0
+
+    def cmdline_visible_rows(self, count: int) -> int:
+        height, _ = self.stdscr.getmaxyx()
+        return max(1, min(count, 8, height - 6))
+
+    def submit_cmdline(self) -> bool:
+        """Run the command line. A completion chosen with the arrows (or ctrl+n/ctrl+p) is taken first.
+        Something that isn't a command or reference yet takes the highlighted completion instead, like
+        the go-to modal."""
+        chosen = self.cmdline_chosen
+        if chosen:
+            completions = self.cmdline_completions()
+            if completions:
+                self.accept_completion(completions)
+        text = self.cmdline_text.strip()
+        if not text:
+            self.close_cmdline()
+            return True
+        command, args = self.parse_ex_command(text)
+        if command is not None:
+            self.close_cmdline()
+            return self.run_ex_command(command, args)
+        target = self.parse_cmdline_reference(text)
+        if target is not None:
+            self.close_cmdline()
+            self.jump_to_reference(*target)
+            return True
+        completions = self.cmdline_completions()
+        if chosen or completions:
+            if not chosen:
+                self.accept_completion(completions)
+            return True  # Keep editing: one Enter takes one completion.
+        self.close_cmdline()
+        self.show_error(f"not a command or reference: {text}")
+        return True
+
+    def parse_ex_command(self, text: str) -> tuple[ExCommand | None, str]:
+        word, _, args = text.partition(" ")
+        folded = word.casefold()
+        for command in EX_COMMANDS:
+            if folded in command.aliases or (
+                len(folded) >= len(command.short) and command.name.startswith(folded)
+            ):
+                return command, args.strip()
+        return None, ""
+
+    def parse_cmdline_reference(self, text: str) -> tuple[Book, int, int] | None:
+        """``John 3:16``, or ``John 3`` and ``John`` for the start of a chapter or book."""
+        book, chapter, verse = self.parse_goto_reference(text)
+        if book is not None:
+            return book, chapter, verse
+        book, rest = self.goto_book_and_rest(text)
+        if book is None:
+            return None
+        chapters = self.store.chapters(book.id)
+        if not rest and chapters:
+            chapter = chapters[0]
+        elif rest.isdigit() and int(rest) in chapters:
+            chapter = int(rest)
+        else:
+            return None
+        verses = self.verses_for_reference(book.id, chapter)
+        return (book, chapter, verses[0].number) if verses else None
+
+    def run_ex_command(self, command: ExCommand, args: str) -> bool:
+        if command.name == "quit":
+            return False
+        if command.name == "find":
+            self.open_fuzzy_finder()
+            if args:
+                self.fuzzy_query = args
+                self.refresh_fuzzy_matches()
+        elif command.name == "set":
+            self.run_set(args)
+        elif command.name == "vsplit":
+            self.open_split_picker(SPLIT_VERTICAL)
+        elif command.name == "split":
+            self.open_split_picker(SPLIT_HORIZONTAL)
+        elif command.name == "close":
+            self.close_pane(self.active_pane)
+        elif command.name == "only":
+            self.handle_window_key(ord("o"))
+        elif command.name == "marks":
+            self.open_list_modal(LIST_MARKS)
+        elif command.name == "highlights":
+            self.open_list_modal(LIST_HIGHLIGHTS)
+        return True
+
+    def run_set(self, args: str) -> None:
+        """``:set version`` opens the picker; ``:set version=ASV`` (or ``version ASV``) switches."""
+        option, _, value = args.replace("=", " ", 1).partition(" ")
+        if option.casefold() != "version":
+            self.show_error(f"unknown option: {option}" if option else "usage: :set version=<name>")
+            return
+        value = value.strip()
+        if not value:
+            self.open_version_modal()
+            return
+        version = find_version(self.versions, value)
+        if version is None:
+            available = ", ".join(item.abbreviation for item in self.versions)
+            self.show_error(f"unknown version {value!r} (available: {available})")
+        elif self.active_pane == 1 and self.split_pane is not None:
+            self.switch_split_version(version)
+        else:
+            self.switch_version(version)
+
+    def cmdline_completions(self) -> list[Completion]:
+        """Typeahead for the command line: commands, ``:set version=`` values, then references."""
+        text = self.cmdline_text
+        word, space, rest = text.lstrip().partition(" ")
+        folded = word.casefold()
+        if space and len(folded) >= 2 and "set".startswith(folded):
+            option, equals, prefix = rest.lstrip().replace(" ", "=", 1).partition("=")
+            if not equals:
+                return [Completion("set version=", "set version=", "change the focused pane's version")] if (
+                    "version".startswith(option.casefold())
+                ) else []
+            if option.casefold() != "version":
+                return []
+            prefix = prefix.casefold()
+            return [
+                Completion(f"set version={version.abbreviation}", version.abbreviation, version.name)
+                for version in self.versions
+                if version.abbreviation.casefold().startswith(prefix) or version.name.casefold().startswith(prefix)
+            ]
+        completions: list[Completion] = []
+        if not space:
+            for command in EX_COMMANDS:
+                if command.name.startswith(folded):
+                    if command.name == "set":
+                        insert = "set version="
+                    else:
+                        insert = command.name + (" " if command.args else "")
+                    label = f"{command.name} {command.args}".rstrip()
+                    completions.append(Completion(insert, label, command.description))
+        elif self.parse_ex_command(text.strip())[0] is not None:
+            return []  # Free-form arguments, such as :find's words.
+        if text.strip():
+            completions.extend(Completion(item, item.strip()) for item in self.reference_suggestions(text))
+        return [item for item in completions if item.text != text]
 
     def handle_search_input_key(self, key: int) -> None:
         if key == 27:
@@ -2121,7 +2367,12 @@ class BibleTui:
             self.draw_list_modal(height, width)
         if self.picker_open:
             self.draw_highlight_picker(height, width)
-        if self.search_input_active:
+        if self.cmdline_active:
+            self.draw_cmdline(height, width)
+        if self.cmdline_active:
+            self.set_cursor_visibility(True)
+            self.stdscr.move(height - 1, min(1 + len(self.cmdline_text), max(0, width - 2)))
+        elif self.search_input_active:
             self.position_search_cursor(height - 1, width)
         elif self.goto_open:
             self.position_goto_cursor(height, width)
@@ -2285,32 +2536,75 @@ class BibleTui:
         if self.focus == FOCUS_TEXT and self.split_pane is not None:
             sides = ("left", "right") if self.split == SPLIT_VERTICAL else ("top", "bottom")
             focus = f"text ({sides[self.active_pane]})"
-        status = f" {version} | {location} | focus: {focus} "
-        visual = "-- VISUAL LINE --" if self.visual_line else "-- VISUAL --"
-        hint_width = len("ctrl+p commands")
-        # Keep the status text clear of the right-aligned visual marker and command hint.
-        reserved = hint_width + 2 + (len(visual) + 1 if self.visual_mode else 0)
-        available = max(0, width - 1 - reserved)
-        message = ""
+        # Vim-style: the mode on the left, the place on the right before the ctrl+p hint, and
+        # messages just left of the place, so the left side stays free for the mode.
+        self.add_screen_line(y, "", width, curses.color_pair(4) | curses.A_DIM)
+        usable = max(0, width - 1)
+        hint_x = usable - len("ctrl+p commands")
+        mode = ""
+        if self.visual_mode:
+            mode = " -- VISUAL LINE --" if self.visual_line else " -- VISUAL --"
+            self.stdscr.addnstr(y, 0, mode, max(0, hint_x - 1), curses.color_pair(7) | curses.A_BOLD)
+        left = len(mode) + 1
+        info = f"{version} | {location} | {focus}"
+        room = hint_x - 2 - left
+        if len(info) > room:
+            info = "..." + info[-(room - 3) :] if room > 3 else ""
+        info_x = hint_x - 2 - len(info)
+        if info:
+            self.stdscr.addnstr(y, info_x, info, len(info), curses.color_pair(4) | curses.A_DIM)
         if self.message:
             icon = self.glyphs.get(self.message_kind, "")
-            message = f"{icon} {self.message} " if icon else f"{self.message} "
-            status = f"{status}| "
-        if len(status) + len(message) > available:
-            if len(status) > available:
-                status, message = status[: max(0, available - 4)] + "... ", ""
-            else:
-                room = available - len(status)
-                message = message[: max(0, room - 4)] + "... " if room > 4 else ""
-        self.add_screen_line(y, status, width, curses.color_pair(4) | curses.A_DIM)
-        if message:
-            # Yellow, or red for a failure, so it stands out from the gray status.
-            attr = curses.color_pair(PAIR_ERROR) | curses.A_BOLD if self.message_kind == MESSAGE_ERROR else curses.color_pair(3)
-            self.stdscr.addnstr(y, len(status), message, len(message), attr)
-        if self.visual_mode and width > 14:
-            visual_x = max(0, width - hint_width - len(visual) - 3)
-            self.stdscr.addnstr(y, visual_x, visual, len(visual), curses.color_pair(7) | curses.A_BOLD)
-        self.draw_command_hint(y, width)
+            message = f"{icon} {self.message}" if icon else self.message
+            room = info_x - 3 - left
+            if len(message) > room:
+                message = message[: room - 3] + "..." if room > 3 else ""
+            if message:
+                # Yellow, or red for a failure, so it stands out from the gray status.
+                if self.message_kind == MESSAGE_ERROR:
+                    attr = curses.color_pair(PAIR_ERROR) | curses.A_BOLD
+                else:
+                    attr = curses.color_pair(3)
+                self.stdscr.addnstr(y, info_x - 3 - len(message), message, len(message), attr)
+        if hint_x > 0:
+            self.draw_command_hint(y, width)
+
+    def draw_cmdline(self, height: int, width: int) -> None:
+        """The ``:`` line in the footer, with completions in a menu above it."""
+        y = height - 1
+        usable = max(0, width - 1)
+        self.add_screen_line(y, "", width, 0)
+        self.stdscr.addnstr(y, 0, f":{self.cmdline_text}", usable, curses.color_pair(2))
+        hints = "tab complete  enter run  esc cancel"
+        if usable - len(hints) > len(self.cmdline_text) + 4:
+            self.stdscr.addnstr(y, usable - len(hints), hints, len(hints), curses.color_pair(4) | curses.A_DIM)
+        completions = self.cmdline_completions()
+        if not completions:
+            return
+        rows = self.cmdline_visible_rows(len(completions))
+        label_w = max(len(item.label) for item in completions)
+        desc_w = max(len(item.description) for item in completions)
+        menu_w = min(max(20, label_w + desc_w + (6 if desc_w else 4)), max(20, width - 2))
+        menu_h = rows + 2
+        menu_y = max(1, y - menu_h)
+        win = self.stdscr.derwin(menu_h, menu_w, menu_y, 0)
+        win.erase()
+        border_attr = curses.color_pair(5) | curses.A_BOLD
+        win.attron(border_attr)
+        win.box()
+        win.attroff(border_attr)
+        inner_w = menu_w - 2
+        cursor = clamp(self.cmdline_cursor, 0, len(completions) - 1)
+        for row, item in enumerate(completions[self.cmdline_scroll : self.cmdline_scroll + rows]):
+            selected = self.cmdline_scroll + row == cursor
+            row_attr = curses.color_pair(1) if selected else 0
+            win.addnstr(row + 1, 1, " " * inner_w, inner_w, row_attr)
+            win.addnstr(row + 1, 2, item.label, max(0, inner_w - 2), row_attr if selected else curses.color_pair(2))
+            desc_x = 2 + label_w + 2
+            if item.description and desc_x < inner_w:
+                desc_attr = row_attr if selected else curses.color_pair(4) | curses.A_DIM
+                win.addnstr(row + 1, desc_x, item.description, inner_w - desc_x, desc_attr)
+        self.draw_scrollbar(win, len(completions), self.cmdline_scroll, rows, focused=True)
 
     def draw_command_hint(self, y: int, width: int) -> None:
         parts = (("ctrl+p", "commands"),)
