@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from bible_tui.store import BibleStore
@@ -168,6 +169,25 @@ class KeybindingTest(unittest.TestCase):
         self.assertFalse(self.app.visual_line)
         self.press("v")
         self.assertFalse(self.app.visual_mode)
+
+    def test_yy_yanks_just_the_verse_text_by_default(self) -> None:
+        self.go_to("John", 11, 35)
+        copied: list[str] = []
+        with mock.patch("bible_tui.tui.copy_to_clipboard", side_effect=lambda text: copied.append(text) or True):
+            self.press("y", "y")
+        self.assertEqual(copied, ["Jesus wept."])
+        self.assertEqual(self.app.message, "yanked verse")
+
+    def test_yy_uses_the_yank_format(self) -> None:
+        self.go_to("Genesis", 1, 1)
+        self.app.yank_format = '"{text}" ({book_abbr} {chapter}:{verse} {version}) {{{version_name}}}'
+        copied: list[str] = []
+        with mock.patch("bible_tui.tui.copy_to_clipboard", side_effect=lambda text: copied.append(text) or True):
+            self.press("y", "y")
+        self.assertEqual(
+            copied,
+            ['"In the beginning God created the heaven and the earth." (Gen. 1:1 KJV) {King James Version}'],
+        )
 
     def test_chapter_stepping_crosses_books(self) -> None:
         self.go_to("Genesis", 50, 3)

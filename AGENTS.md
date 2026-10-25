@@ -14,7 +14,8 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   so tests can call it directly. User-facing failures raise `CliError` or `ConfigError` and exit 1.
 - `bible_tui/paths.py` resolves the app home (`$BIBLE_TUI_HOME`, else `~/.bible-tui` if it exists, else
   `$XDG_CONFIG_HOME/bible-tui`). Functions take an `env` mapping so tests never touch the real home.
-- `bible_tui/config.py` holds `Settings`/`load_settings` for the user-written `config.json` and
+- `bible_tui/config.py` holds `Settings`/`load_settings` for the user-written `config.json` (including the
+  `yank_format` template for `yy`, validated against `YANK_FORMAT_FIELDS` at load) and
   `load_state`/`save_state` for the app-written `state.json`. It also has `write_json`, an atomic writer meant
   for marks, highlights, and future notes files.
 - `bible_tui/versions.py` holds `BibleVersion`, `inspect_database` (schema check plus metadata), and
@@ -95,7 +96,15 @@ disabled.
   `NUMBER_WIDTH`, `GUTTER_WIDTH`). It's always shown, like Vim's `signcolumn=yes`, so text never shifts. Signs
   are drawn on a verse's first line only. The mark sign is `MARK_SIGN_NERD_FONT` (U+F02E, nf-fa-bookmark,
   present in Nerd Fonts v2 and v3) when the `nerd_font` setting is true, otherwise `MARK_SIGN_PLAIN` (`●`),
-  in blue. Nerd Font use is always opt-in; never try to detect the font.
+  in blue. Nerd Font use is always opt-in; never try to detect the font. Every icon lives in the `GLYPHS`
+  table as `(Nerd Font icon, plain fallback)` and is read through `self.glyphs[name]`. Add new icons there,
+  only Font Awesome 4 (`nf-fa-*`) code points (stable across Nerd Fonts v2 and v3; `nf-md-*` moved in v3),
+  and follow each icon with a space because non-Mono Nerd Fonts draw it wider than one cell.
+- Footer messages: assigning `self.message` shows an info message; `set_message(text, MESSAGE_YANK)` and
+  `show_error(text)` set the other kinds. Messages draw in yellow (errors in bold red, with the warning icon
+  when `nerd_font` is on) and clear themselves after `MESSAGE_SECONDS`: `run` sets a `getch` timeout from
+  `message_timeout_ms` and redraws when it fires. Use `show_error` for failures (saves, opening a database,
+  the clipboard).
 - `m` toggles a mark on the current verse or every verse in the visual selection (`BibleTui.toggle_mark`).
 - `c` opens the highlight picker for the same targets (`target_verse_keys`): six colors plus Clear, keys `1`–`6`,
   `0`/`x`/`d` to clear, or arrows and Enter. It preselects the verses' shared color, else the last color used.

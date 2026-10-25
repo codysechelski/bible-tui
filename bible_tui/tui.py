@@ -10,10 +10,12 @@ import subprocess
 import sys
 import termios
 import textwrap
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from bible_tui.config import DEFAULT_YANK_FORMAT
 from bible_tui.highlights import HIGHLIGHT_COLORS, HighlightError, HighlightStore
 from bible_tui.marks import MarkError, MarkStore, VerseKey
 from bible_tui.store import BOOK_ABBREVIATIONS, BibleStore, BibleVerse, Book, Verse
@@ -67,6 +69,26 @@ NUMBER_WIDTH = 4
 GUTTER_WIDTH = SIGN_WIDTH + NUMBER_WIDTH
 MARK_SIGN_NERD_FONT = "\uf02e"  # nf-fa-bookmark, present in Nerd Fonts v2 and v3
 MARK_SIGN_PLAIN = "\u25cf"  # ● renders in practically every font
+
+# Each glyph as (Nerd Font icon, plain fallback). Nerd Fonts are opt-in (the nerd_font setting) and never
+# detected. The icons are all Font Awesome 4 (nf-fa-*), whose code points are the same in Nerd Fonts v2 and
+# v3. Put a space after an icon: non-Mono Nerd Fonts draw it wider than the one cell curses counts.
+GLYPHS: dict[str, tuple[str, str]] = {
+    "mark": (MARK_SIGN_NERD_FONT, MARK_SIGN_PLAIN),
+    "missing": ("\uf070", ""),  # nf-fa-eye_slash: a verse one split pane's version leaves out
+    "search": ("\uf002", "SEARCH"),  # nf-fa-search: the search footer prefix
+    "find": ("\uf002", "FIND >"),  # nf-fa-search: the fuzzy finder prompt
+    "goto": ("\uf05b", ""),  # nf-fa-crosshairs: the go-to modal title
+    "yank": ("\uf0ea", ""),  # nf-fa-clipboard: copied-to-clipboard messages
+    "error": ("\uf071", ""),  # nf-fa-warning: failure messages
+    "current": ("\uf00c", "*"),  # nf-fa-check: the version a pane shows now, in the version picker
+}
+
+# Footer messages: what an action did. They fade after a few seconds; failures stay longer.
+MESSAGE_INFO = "info"
+MESSAGE_YANK = "yank"
+MESSAGE_ERROR = "error"
+MESSAGE_SECONDS = {MESSAGE_INFO: 3.0, MESSAGE_YANK: 3.0, MESSAGE_ERROR: 6.0}
 MISSING_SHADE = "\u2591"  # ░ fills a verse that one split pane's version leaves out
 
 # A split shows a second text pane beside (vertical) or below (horizontal) the first.
@@ -280,8 +302,13 @@ class BibleTui:
         marks: MarkStore | None = None,
         highlights: HighlightStore | None = None,
         nerd_font: bool = False,
+        yank_format: str = DEFAULT_YANK_FORMAT,
     ) -> None:
         self.stdscr = stdscr
+        self._message = ""
+        self.message_kind = MESSAGE_INFO
+        self.message_until = 0.0  # time.monotonic() when the footer message goes away
+        self.yank_format = yank_format
         self.store = store
         self.version = version
         self.versions: tuple[BibleVersion, ...] = tuple(versions) or (version,)
@@ -289,7 +316,8 @@ class BibleTui:
         self.on_split_change = on_split_change
         self.marks = marks if marks is not None else MarkStore(None)
         self.highlights = highlights if highlights is not None else HighlightStore(None)
-        self.mark_sign = MARK_SIGN_NERD_FONT if nerd_font else MARK_SIGN_PLAIN
+        self.glyphs = {name: icon if nerd_font else plain for name, (icon, plain) in GLYPHS.items()}
+        self.mark_sign = self.glyphs["mark"]
         self.version_modal_open = False
         self.version_mode = PICK_VERSION
         self.version_column = 0  # The picker column (split pane) the cursor is in.
@@ -356,6 +384,33 @@ class BibleTui:
         if self.books:
             self.select_book(self.book_cursor)
 
+    @property
+    def message(self) -> str:
+        return self._message
+
+    @message.setter
+    def message(self, text: str) -> None:
+        self.set_message(text)
+
+    def set_message(self, text: str, kind: str = MESSAGE_INFO) -> None:
+        """Show ``text`` in the footer for a few seconds. ``kind`` picks the color, icon, and time."""
+        self._message = text
+        self.message_kind = kind
+        self.message_until = time.monotonic() + MESSAGE_SECONDS[kind] if text else 0.0
+
+    def show_error(self, text: str) -> None:
+        self.set_message(text, MESSAGE_ERROR)
+
+    def expire_message(self) -> None:
+        if self._message and time.monotonic() >= self.message_until:
+            self._message = ""
+
+    def message_timeout_ms(self) -> int:
+        """How long ``getch`` may wait before the footer message needs clearing (-1: no limit)."""
+        if not self._message:
+            return -1
+        return max(1, int((self.message_until - time.monotonic()) * 1000) + 1)
+
     def close(self) -> None:
         self.store.close()
         if self.split_pane is not None:
@@ -405,8 +460,12 @@ class BibleTui:
         self.stdscr.timeout(-1)
 
         while True:
+            self.expire_message()
             self.draw()
+            self.stdscr.timeout(self.message_timeout_ms())
             key = self.stdscr.getch()
+            if key == -1:
+                continue  # Timed out so an expired message can be cleared.
             if not self.handle_key(key):
                 return
 
@@ -836,7 +895,7 @@ class BibleTui:
             store = BibleStore(version.path)
             books = store.books(self.alphabetical)
         except sqlite3.Error as error:
-            self.message = f"could not open {version.name}: {error}"
+            self.show_error(f"could not open {version.name}: {error}")
             return
 
         if position is None:
@@ -858,14 +917,14 @@ class BibleTui:
             try:
                 self.on_version_change(version)
             except OSError:
-                self.message = f"switched to {version.name} (could not save state)"
+                self.show_error(f"switched to {version.name} (could not save state)")
 
     def open_split_pane(self, version: BibleVersion) -> SplitPane | None:
         try:
             store = BibleStore(version.path)
             books = {book.sort_order: book for book in store.books(False)}
         except sqlite3.Error as error:
-            self.message = f"could not open {version.name}: {error}"
+            self.show_error(f"could not open {version.name}: {error}")
             return None
         return SplitPane(version, store, books)
 
@@ -940,7 +999,7 @@ class BibleTui:
         try:
             self.on_split_change(self.split, self.split_pane.version if self.split_pane else None)
         except OSError:
-            self.message = f"{self.message} (could not save state)"
+            self.show_error(f"{self.message} (could not save state)")
 
     def focus_pane(self, index: int) -> None:
         """Move focus to a text pane (0 is the left or top pane)."""
@@ -1097,7 +1156,7 @@ class BibleTui:
             else:
                 self.highlights.remove(key)
         except (MarkError, HighlightError, OSError) as error:
-            self.message = f"{self.list_kind} not saved: {error}"
+            self.show_error(f"{self.list_kind} not saved: {error}")
             return
         del self.list_rows[self.list_cursor]
         self.list_cursor = clamp(self.list_cursor, 0, max(0, len(self.list_rows) - 1))
@@ -1197,7 +1256,7 @@ class BibleTui:
         try:
             self.highlights.apply(keys, color)
         except (HighlightError, OSError) as error:
-            self.message = f"highlights not saved: {error}"
+            self.show_error(f"highlights not saved: {error}")
             return
         target = self.verse_reference(keys[0]) if len(keys) == 1 else f"{len(keys)} verses"
         if color is None:
@@ -1741,7 +1800,7 @@ class BibleTui:
         try:
             marked = self.marks.toggle(keys)
         except (MarkError, OSError) as error:
-            self.message = f"marks not saved: {error}"
+            self.show_error(f"marks not saved: {error}")
             return
         finally:
             self.exit_visual_mode()
@@ -1772,17 +1831,36 @@ class BibleTui:
         self.visual_anchor = None
 
     def yank_current_verse(self) -> None:
+        """``yy``: the verse through the ``yank_format`` template (just the text by default)."""
         verse = self.active_verses[self.verse_cursor]
         if isinstance(verse, MissingVerse):
             self.message = f"{self.location_label()} is not in {self.pane_version(self.active_pane).name}"
             return
-        self.yank_to_clipboard(verse.text, "verse")
+        self.yank_to_clipboard(self.format_yank(verse), "verse")
+
+    def format_yank(self, verse: Verse) -> str:
+        """Fill ``yank_format`` from the focused pane, so its version and book name are used."""
+        version = self.pane_version(self.active_pane)
+        book = self.selected_book
+        if self.active_pane == 1 and self.split_pane is not None:
+            book = self.split_pane.books.get(book.sort_order, book)
+        reference = f"{book.name} {self.selected_chapter}:{verse.number}"
+        return self.yank_format.format(
+            text=verse.text,
+            reference=reference,
+            book=book.name,
+            book_abbr=BOOK_ABBREVIATIONS.get(book.name, book.name),
+            chapter=self.selected_chapter,
+            verse=verse.number,
+            version=version.abbreviation,
+            version_name=version.name,
+        )
 
     def yank_to_clipboard(self, text: str, label: str) -> None:
         if not copy_to_clipboard(text):
-            self.message = "clipboard unavailable"
+            self.show_error("clipboard unavailable")
             return
-        self.message = f"yanked {label}"
+        self.set_message(f"yanked {label}", MESSAGE_YANK)
 
     def move_text_cursor(self, delta: int) -> None:
         if not self.verses:
@@ -2121,7 +2199,7 @@ class BibleTui:
             else:
                 attr = 0
             win.addnstr(row + 1, 1, f" {book.name} ".ljust(inner_w), inner_w, attr)
-        self.draw_scrollbar(win, len(self.book_rows), self.book_scroll, inner_h)
+        self.draw_scrollbar(win, len(self.book_rows), self.book_scroll, inner_h, focused=self.focus == FOCUS_BOOKS)
 
     def draw_chapters(self, y: int, x: int, h: int, w: int) -> None:
         win = self.stdscr.derwin(h, w, y, x)
@@ -2135,7 +2213,7 @@ class BibleTui:
             if self.selected_chapter == chapter:
                 attr |= curses.A_REVERSE if self.focus != FOCUS_CHAPTERS else curses.A_BOLD
             win.addnstr(row + 1, 1, f"{chapter:^5}", 5, attr)
-        self.draw_scrollbar(win, len(self.chapters), self.chapter_scroll, inner_h)
+        self.draw_scrollbar(win, len(self.chapters), self.chapter_scroll, inner_h, focused=self.focus == FOCUS_CHAPTERS)
 
     def draw_text(
         self,
@@ -2157,7 +2235,8 @@ class BibleTui:
             title = f"{self.pane_version(pane).name} | {chapter}"
             if hidden_pane:
                 title = f"{title} | other pane hidden: terminal too small"
-        self.draw_box(win, title, self.focus == FOCUS_TEXT and pane == self.active_pane)
+        focused = self.focus == FOCUS_TEXT and pane == self.active_pane
+        self.draw_box(win, title, focused)
         inner_h = max(0, h - 2)
         inner_w = max(0, w - 2)
         verses = self.pane_verses(pane)
@@ -2177,7 +2256,12 @@ class BibleTui:
                 if line.verse_number:
                     win.addnstr(row + 1, 1 + SIGN_WIDTH, line.verse_number, NUMBER_WIDTH, shade_attr)
                 shade_w = max(0, inner_w - GUTTER_WIDTH - 1)
-                win.addnstr(row + 1, 1 + GUTTER_WIDTH, MISSING_SHADE * shade_w, shade_w, shade_attr)
+                shade = MISSING_SHADE * shade_w
+                icon = self.glyphs["missing"]
+                if icon and line.verse_number:
+                    note = f"{icon} not in {self.pane_version(pane).name} "
+                    shade = (note + shade[len(note) :])[:shade_w]
+                win.addnstr(row + 1, 1 + GUTTER_WIDTH, shade, shade_w, shade_attr)
                 continue
             if line.verse_number:
                 key = self.verse_key(line.verse_index)
@@ -2189,7 +2273,7 @@ class BibleTui:
             self.draw_text_segment(
                 win, row + 1, 1 + GUTTER_WIDTH, line, max(0, inner_w - GUTTER_WIDTH), base_attr, pane
             )
-        self.draw_scrollbar(win, len(lines), self.text_scroll, inner_h)
+        self.draw_scrollbar(win, len(lines), self.text_scroll, inner_h, focused=focused)
 
     def draw_status(self, y: int, width: int) -> None:
         if self.search_scope is not None:
@@ -2202,16 +2286,27 @@ class BibleTui:
             sides = ("left", "right") if self.split == SPLIT_VERTICAL else ("top", "bottom")
             focus = f"text ({sides[self.active_pane]})"
         status = f" {version} | {location} | focus: {focus} "
-        if self.message:
-            status = f"{status}| {self.message} "
         visual = "-- VISUAL LINE --" if self.visual_line else "-- VISUAL --"
         hint_width = len("ctrl+p commands")
         # Keep the status text clear of the right-aligned visual marker and command hint.
         reserved = hint_width + 2 + (len(visual) + 1 if self.visual_mode else 0)
         available = max(0, width - 1 - reserved)
-        if len(status) > available:
-            status = status[: max(0, available - 4)] + "... "
+        message = ""
+        if self.message:
+            icon = self.glyphs.get(self.message_kind, "")
+            message = f"{icon} {self.message} " if icon else f"{self.message} "
+            status = f"{status}| "
+        if len(status) + len(message) > available:
+            if len(status) > available:
+                status, message = status[: max(0, available - 4)] + "... ", ""
+            else:
+                room = available - len(status)
+                message = message[: max(0, room - 4)] + "... " if room > 4 else ""
         self.add_screen_line(y, status, width, curses.color_pair(4) | curses.A_DIM)
+        if message:
+            # Yellow, or red for a failure, so it stands out from the gray status.
+            attr = curses.color_pair(PAIR_ERROR) | curses.A_BOLD if self.message_kind == MESSAGE_ERROR else curses.color_pair(3)
+            self.stdscr.addnstr(y, len(status), message, len(message), attr)
         if self.visual_mode and width > 14:
             visual_x = max(0, width - hint_width - len(visual) - 3)
             self.stdscr.addnstr(y, visual_x, visual, len(visual), curses.color_pair(7) | curses.A_BOLD)
@@ -2239,7 +2334,7 @@ class BibleTui:
             return
 
         self.add_screen_line(y, "", width, curses.color_pair(4) | curses.A_DIM)
-        prefix = "SEARCH"
+        prefix = self.glyphs["search"]
         prompt = f" /{self.search_query}"
         hint_start = usable_width
         if not self.search_input_active:
@@ -2280,7 +2375,7 @@ class BibleTui:
         usable_width = max(0, width - 1)
         hint_width = sum(len(label) + 1 + len(key) for label, key in SEARCH_HINTS)
         hint_width += 2 * (len(SEARCH_HINTS) - 1)
-        return max(len("SEARCH /") + 1, usable_width - hint_width)
+        return max(len(self.glyphs["search"]) + 3, usable_width - hint_width)
 
     def draw_search_hints(self, y: int, width: int) -> None:
         usable_width = max(0, width - 1)
@@ -2381,7 +2476,7 @@ class BibleTui:
         if columns == 1:
             current = self.version if self.version_mode == PICK_VERSION else None
             self.draw_version_column(win, 0, 1, 1, modal_w - 2, visible_rows, current, active=True)
-            self.draw_scrollbar(win, len(self.versions), self.version_scrolls[0], visible_rows)
+            self.draw_scrollbar(win, len(self.versions), self.version_scrolls[0], visible_rows, focused=True)
             return
 
         inner_w = modal_w - 2
@@ -2425,7 +2520,7 @@ class BibleTui:
                 row_attr = 0
             marker_attr = row_attr if selected else curses.color_pair(3) | curses.A_BOLD
             name_attr = row_attr if selected else curses.color_pair(2)
-            marker = "*" if version == current else " "
+            marker = self.glyphs["current"] if version == current else " "
             win.addnstr(top + row, x, " " * w, w, row_attr)
             win.addnstr(top + row, x + 1, marker, 1, marker_attr)
             win.addnstr(top + row, x + 3, version.name, max(0, w - 4), name_attr)
@@ -2491,7 +2586,7 @@ class BibleTui:
                 win.addnstr(row + 1, ref_x, reference, ref_w, ref_attr)
                 if text_w > 0:
                     win.addnstr(row + 1, text_x, text, text_w, text_attr)
-            self.draw_scrollbar(win, count, self.list_scroll, visible_rows, track_h=visible_rows)
+            self.draw_scrollbar(win, count, self.list_scroll, visible_rows, track_h=visible_rows, focused=True)
 
         hints = (("d", "delete"), ("enter", "go"), ("esc", "close")) if self.list_rows else (("esc", "close"),)
         hint = "  ".join(f"{key} {label}" for key, label in hints)
@@ -2574,12 +2669,15 @@ class BibleTui:
         self.draw_fuzzy_preview(preview_win, selected_match)
         self.draw_fuzzy_footer(modal_y + pane_h, modal_x, modal_w)
 
+    def fuzzy_prompt(self) -> str:
+        return f" {self.glyphs['find']} "
+
     def draw_fuzzy_header(self, win: curses.window) -> None:
         _, max_x = win.getmaxyx()
         if max_x <= 4:
             return
 
-        prompt = " FIND > "
+        prompt = self.fuzzy_prompt()
         prompt_x = 2
         query_x = prompt_x + len(prompt)
         count_label = ""
@@ -2715,7 +2813,8 @@ class BibleTui:
         win = self.stdscr.derwin(pane_h, modal_w, modal_y, modal_x)
         win.bkgd(" ", modal_attr)
         win.erase()
-        self.draw_box(win, " Go To Reference ", True)
+        icon = self.glyphs["goto"]
+        self.draw_box(win, f" {icon} Go To Reference " if icon else " Go To Reference ", True)
 
         input_y = 2
         input_x = 3
@@ -2857,7 +2956,7 @@ class BibleTui:
             result_w = max(20, modal_w - 21)
         cursor_x = modal_x + 2 + min(
             max(0, result_w - 4),
-            len(" FIND > ") + len(self.fuzzy_query),
+            len(self.fuzzy_prompt()) + len(self.fuzzy_query),
         )
         self.set_cursor_visibility(True)
         try:
@@ -2905,9 +3004,12 @@ class BibleTui:
         col: int | None = None,
         row_start: int = 1,
         track_h: int | None = None,
+        focused: bool = False,
     ) -> None:
+        """Draw over the window's right border. ``focused`` matches a focused (green) border."""
         if total <= visible or visible <= 0:
             return
+        attr = curses.color_pair(5) | curses.A_BOLD if focused else curses.color_pair(2)
         max_y, max_x = win.getmaxyx()
         if col is None:
             col = max_x - 1
@@ -2921,10 +3023,10 @@ class BibleTui:
         for y in range(row_start, row_start + track_h):
             ch = "┃" if thumb_top <= y < thumb_top + thumb_h else curses.ACS_VLINE
             try:
-                win.addch(y, col, ch, curses.color_pair(2))
+                win.addch(y, col, ch, attr)
             except (curses.error, UnicodeEncodeError):
                 if thumb_top <= y < thumb_top + thumb_h:
-                    win.addch(y, col, curses.ACS_CKBOARD, curses.color_pair(2))
+                    win.addch(y, col, curses.ACS_CKBOARD, attr)
 
     def text_lines(self, rects: list[tuple[int, int, int, int, int]]) -> dict[int, list[RenderLine]]:
         """Wrapped lines for each drawn pane. Split panes pad each verse to the taller side, so a verse
@@ -3007,7 +3109,7 @@ class BibleTui:
             self.set_cursor_visibility(False)
             return
         self.set_cursor_visibility(True)
-        self.stdscr.move(y, min(len("SEARCH /") + len(self.search_query), usable_width - 1))
+        self.stdscr.move(y, min(len(self.glyphs["search"]) + 2 + len(self.search_query), usable_width - 1))
 
     def position_goto_cursor(self, height: int, width: int) -> None:
         modal_y, modal_x, _, modal_w = self.goto_modal_geometry(height, width)

@@ -53,6 +53,22 @@ class SettingsTest(unittest.TestCase):
     def test_missing_file_gives_defaults(self) -> None:
         self.assertEqual(load_settings(self.path, self.env), Settings())
 
+    def test_yank_format(self) -> None:
+        self.write({"yank_format": "{reference} ({version})\n{text}"})
+        self.assertEqual(load_settings(self.path, self.env).yank_format, "{reference} ({version})\n{text}")
+        for bad, needle in (
+            ("{txt}", "unknown field {txt}"),
+            ("{}", "unknown field {}"),
+            ("{text.__class__}", "unknown field"),
+            ("{text", "not a valid template"),
+            ("{verse:x>q}", "not a valid template"),
+            (5, "must be a string"),
+        ):
+            with self.subTest(bad=bad):
+                self.write({"yank_format": bad})
+                with self.assertRaisesRegex(ConfigError, needle):
+                    load_settings(self.path, self.env)
+
     def test_reads_settings_and_resolves_directories(self) -> None:
         self.write({"default_version": "KJV", "bibles_dirs": ["~/Bibles", "local", "/abs"], "book_order": "alphabetical"})
         settings = load_settings(self.path, self.env)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import string
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -18,6 +19,19 @@ from bible_tui.paths import STATE_FILE_NAME, expand_path
 
 
 BOOK_ORDERS = ("bible", "alphabetical")
+
+# ``yy`` copies the current verse through this template. Fields, with John 3:16 in the KJV as the example:
+YANK_FORMAT_FIELDS = {
+    "text": "For God so loved the world...",
+    "reference": "John 3:16",
+    "book": "John",
+    "book_abbr": "John",  # Common abbreviation, e.g. "Gen." for Genesis
+    "chapter": 3,
+    "verse": 16,
+    "version": "KJV",
+    "version_name": "King James Version",
+}
+DEFAULT_YANK_FORMAT = "{text}"
 
 
 class ConfigError(Exception):
@@ -31,6 +45,7 @@ class Settings:
     book_order: str = "bible"
     nerd_font: bool = False
     remember_split: bool = False
+    yank_format: str = DEFAULT_YANK_FORMAT
     warnings: tuple[str, ...] = field(default=(), compare=False)
 
 
@@ -67,7 +82,7 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"{path}: expected a JSON object at the top level")
 
     warnings: list[str] = []
-    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "remember_split"}
+    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "remember_split", "yank_format"}
     for key in sorted(set(data) - known):
         warnings.append(f"{path}: ignoring unknown setting {key!r}")
 
@@ -98,14 +113,37 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
     if not isinstance(remember_split, bool):
         raise ConfigError(f"{path}: remember_split must be true or false")
 
+    yank_format = data.get("yank_format", DEFAULT_YANK_FORMAT)
+    if not isinstance(yank_format, str):
+        raise ConfigError(f"{path}: yank_format must be a string")
+    check_yank_format(path, yank_format)
+
     return Settings(
         default_version=default_version or None,
         bibles_dirs=tuple(bibles_dirs),
         book_order=book_order,
         nerd_font=nerd_font,
         remember_split=remember_split,
+        yank_format=yank_format,
         warnings=tuple(warnings),
     )
+
+
+def check_yank_format(path: Path, template: str) -> None:
+    """Only the plain ``{field}`` names in ``YANK_FORMAT_FIELDS`` are allowed (``{{`` and ``}}`` for braces)."""
+    fields = ", ".join(f"{{{name}}}" for name in YANK_FORMAT_FIELDS)
+    try:
+        parsed = list(string.Formatter().parse(template))
+    except ValueError as error:
+        raise ConfigError(f"{path}: yank_format is not a valid template ({error}); use {{{{ and }}}} for braces") from None
+    for _, name, _, _ in parsed:
+        if name is not None and name not in YANK_FORMAT_FIELDS:
+            shown = f"{{{name}}}" if name else "{}"
+            raise ConfigError(f"{path}: yank_format has unknown field {shown} (available: {fields})")
+    try:
+        template.format(**YANK_FORMAT_FIELDS)
+    except (ValueError, TypeError) as error:
+        raise ConfigError(f"{path}: yank_format is not a valid template ({error})") from None
 
 
 def load_state(home: Path) -> dict[str, object]:

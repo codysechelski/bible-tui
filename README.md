@@ -73,14 +73,16 @@ In the text pane:
 | Next word / previous word / end of word | `w` / `b` / `e` |
 | Select text / select whole verses | `v` / `V` (press again or Esc to cancel) |
 | Copy the selection | `y` |
-| Copy the current verse | `yy` |
+| Copy the current verse (add its reference with the `yank_format` setting) | `yy` |
 | Mark / unmark the verse (or every verse in a selection) | `m` |
 | List all marks, newest first (Enter jumps to one, `d` or Delete removes it) | `M` or `'` |
 | Highlight the verse (or every verse in a selection) in a color | `c` |
 | List all highlights, newest first (Enter jumps, `d` or Delete removes) | `C` or `"` |
 
 Copying uses the system clipboard. Marked verses show `●` in the column left of the verse number, or a
-bookmark icon if you set `"nerd_font": true` in `config.json`. Marks are saved and show in every version.
+bookmark icon if you set `"nerd_font": true` in `config.json` (which turns on a few other icons too).
+Messages about what an action did show in yellow in the footer (failures in red) and fade after a few
+seconds. Marks are saved and show in every version.
 
 ### Comparing two versions
 
@@ -115,7 +117,8 @@ Settings live in `config.json` in the app home: `~/.bible-tui` if that folder ex
   "bibles_dirs": ["~/Bibles"],
   "book_order": "bible",
   "nerd_font": false,
-  "remember_split": false
+  "remember_split": false,
+  "yank_format": "{text}"
 }
 ```
 

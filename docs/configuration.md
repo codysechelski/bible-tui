@@ -38,7 +38,8 @@ Every key is optional. A missing file means all defaults.
   "bibles_dirs": ["~/Bibles", "/usr/share/bibles"],
   "book_order": "bible",
   "nerd_font": false,
-  "remember_split": false
+  "remember_split": false,
+  "yank_format": "{text}"
 }
 ```
 
@@ -47,11 +48,42 @@ Every key is optional. A missing file means all defaults.
 | `default_version` | none | Version to open at launch. Matches an abbreviation (`KJV`), a full name, or a database file name. |
 | `bibles_dirs` | `[]` | Extra folders to search for Bible databases. `~` is expanded; relative paths are taken from the config file's folder. A single string is accepted too. |
 | `book_order` | `"bible"` | Starting book order: `"bible"` (canonical, grouped by testament) or `"alphabetical"`. `a` still toggles it in the app. |
-| `nerd_font` | `false` | Set to `true` if your terminal uses a [Nerd Font](https://www.nerdfonts.com/) to get icons, such as the bookmark icon for marked verses. Off by default because a terminal program can't detect the font, and a missing glyph shows as an empty box. Without it, plain Unicode symbols (`●`) are used. |
+| `nerd_font` | `false` | Set to `true` if your terminal uses a [Nerd Font](https://www.nerdfonts.com/) to get icons: the bookmark for marked verses, search and go-to icons, a check mark for the current version, clipboard and warning icons on messages, and an icon on verses a split pane's version leaves out. Off by default because a terminal program can't detect the font, and a missing glyph shows as an empty box. Without it, plain Unicode symbols (`●`) are used. |
+| `yank_format` | `"{text}"` | What `yy` copies for the current verse. See [The `yy` copy format](#the-yy-copy-format). |
 | `remember_split` | `false` | Set to `true` to reopen a split (`ctrl+w v` or `ctrl+w s`) at launch, with the same orientation and second-pane version. The split is saved in `state.json` as `split` and `split_version`. |
 
 Unknown keys are ignored with a warning. Invalid JSON or a value of the wrong type stops the app with a message
 naming the file, line, and key. Use `--config FILE` to read a different file.
+
+### The `yy` copy format
+
+`yy` fills in the `yank_format` template and copies the result. The default, `"{text}"`, copies just the verse
+text. Write a newline as `\n`, and a literal brace as `{{` or `}}`. A visual selection (`v`/`V`, then `y`) is
+always copied as plain text. These fields are available, shown for John 3:16 in the
+KJV:
+
+| Field | Example |
+| --- | --- |
+| `{text}` | For God so loved the world, ... |
+| `{reference}` | John 3:16 |
+| `{book}` | John |
+| `{book_abbr}` | John (Gen. for Genesis, Rom. for Romans) |
+| `{chapter}` | 3 |
+| `{verse}` | 16 |
+| `{version}` | KJV |
+| `{version_name}` | King James Version |
+
+In a split, the fields come from the focused pane's version. Some examples:
+
+| `yank_format` | Copies |
+| --- | --- |
+| `"{text}"` (default) | just the text |
+| `"{text}\n\n{reference}"` | the text, a blank line, then `John 3:16` |
+| `"\"{text}\" ({reference} {version})"` | `"For God so loved..." (John 3:16 KJV)` |
+| `"{reference} {version}\n{text}"` | `John 3:16 KJV` on the first line, the text on the next |
+| `"{text} —{book_abbr} {chapter}:{verse}"` | `For God so loved... —John 3:16` |
+
+An unknown field such as `{txt}` stops the app at startup with a message that lists the fields.
 
 ## Which version opens at launch
 

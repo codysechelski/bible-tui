@@ -211,12 +211,13 @@ def run_tui(
             marks=marks,
             highlights=highlights,
             nerd_font=settings.nerd_font,
+            yank_format=settings.yank_format,
         )
         split = remembered_split(settings, state, versions)
         if split is not None:
             app.open_split(*split, restoring=True)
         if warnings:
-            app.message = f"warning: {warnings[0]}"
+            app.show_error(f"warning: {warnings[0]}")
         try:
             app.run()
         finally:
