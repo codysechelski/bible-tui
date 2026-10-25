@@ -21,7 +21,8 @@ from pathlib import Path
 
 REPOSITORY = "codysechelski/bible-tui"
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
-RELEASES_PAGE = f"https://github.com/{REPOSITORY}/releases"
+REPOSITORY_URL = f"https://github.com/{REPOSITORY}"
+RELEASES_PAGE = f"{REPOSITORY_URL}/releases"
 CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 FETCH_TIMEOUT_SECONDS = 5.0
 PACKAGE_DIR = Path(__file__).resolve().parent

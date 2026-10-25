@@ -168,6 +168,9 @@ disabled.
 - `:update` (`BibleTui.run_update`) leaves curses (`def_prog_mode`/`endwin`) to show the update command's
   output, and must re-enter (`reset_prog_mode` plus `refresh`) before returning, or `curses.wrapper`'s own
   `endwin()` fails. Update notices use `MESSAGE_UPDATE` (10 s) and never replace a message already showing.
+- `:about` (also in `ctrl+p`) opens the About modal (`about_open`, `about_rows`): version, update status,
+  current Bible, Python, and `REPOSITORY_URL`. `o` opens the link (`open_url`: `open`, `xdg-open`, then
+  `wslview`), `y` copies it, `u` runs `:update` when one is available, Esc/Enter/`q` close.
 - Be careful with terminal sizing logic and bottom-right curses writes; `add_screen_line` intentionally avoids
   the bottom-right cell.
 

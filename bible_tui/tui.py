@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import curses
+import platform
 import re
 import shutil
 import sqlite3
@@ -15,11 +16,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from bible_tui import __version__
 from bible_tui.config import DEFAULT_YANK_FORMAT
 from bible_tui.highlights import HIGHLIGHT_COLORS, HighlightError, HighlightStore
 from bible_tui.marks import MarkError, MarkStore, VerseKey
 from bible_tui.store import BOOK_ABBREVIATIONS, BibleStore, BibleVerse, Book, Verse
-from bible_tui.update import MANUAL_UPDATE, Install, UpdateCheck
+from bible_tui.update import MANUAL_UPDATE, REPOSITORY_URL, Install, UpdateCheck
 from bible_tui.versions import BibleVersion, find_version
 
 FOCUS_BOOKS = 0
@@ -187,6 +189,7 @@ EX_COMMANDS: tuple[ExCommand, ...] = (
     ExCommand("marks", "marks", "", "list marks"),
     ExCommand("highlights", "hi", "", "list highlights"),
     ExCommand("update", "up", "", "update bible-tui and restart"),
+    ExCommand("about", "ab", "", "version and project link"),
 )
 
 
@@ -276,6 +279,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
             Command("commands", "ctrl+p / ?", "commands"),
             Command("command line", ":", "command_line"),
             Command("update bible-tui", ":update", "update"),
+            Command("about bible-tui", ":about", "about"),
             Command("quit", "q", "quit"),
         ),
     ),
@@ -430,6 +434,7 @@ class BibleTui:
         self.list_scroll = 0
         self.picker_open = False
         self.picker_cursor = 0
+        self.about_open = False
         self.picker_keys: list[VerseKey] = []
         self.last_highlight_color = HIGHLIGHT_COLORS[0]
         if self.books:
@@ -574,6 +579,8 @@ class BibleTui:
             return self.handle_version_modal_key(key)
         if self.picker_open:
             return self.handle_picker_key(key)
+        if self.about_open:
+            return self.handle_about_key(key)
         if self.list_kind is not None:
             return self.handle_list_modal_key(key)
         if self.goto_open:
@@ -773,6 +780,9 @@ class BibleTui:
             return False
         if action == "update":
             return self.run_update()
+        if action == "about":
+            self.open_about_modal()
+            return True
         if action == "select":
             self.activate_selection()
         elif action == "search":
@@ -1857,6 +1867,8 @@ class BibleTui:
             self.open_list_modal(LIST_HIGHLIGHTS)
         elif command.name == "update":
             return self.run_update()
+        elif command.name == "about":
+            self.open_about_modal()
         return True
 
     def run_set(self, args: str) -> None:
@@ -2432,6 +2444,8 @@ class BibleTui:
             self.draw_list_modal(height, width)
         if self.picker_open:
             self.draw_highlight_picker(height, width)
+        if self.about_open:
+            self.draw_about_modal(height, width)
         if self.cmdline_active:
             self.draw_cmdline(height, width)
         if self.cmdline_active:
@@ -2991,6 +3005,79 @@ class BibleTui:
             win.addnstr(row + 1, modal_w - 4, number, 1, key_attr)
         self.draw_modal_hints(win, modal_h - 2, modal_w, (("enter", "apply"), ("esc", "cancel")))
 
+    def about_rows(self) -> list[tuple[str, str]]:
+        """The About modal's ``(label, value)`` rows."""
+        check = self.update_check
+        if check is None:
+            latest = "update checks are off"
+        elif check.pending:
+            latest = "checking..."
+        elif check.update_available:
+            latest = f"{check.latest} is out (u to update)"
+        elif check.latest is not None:
+            latest = "up to date"
+        else:
+            latest = "couldn't check (offline?)"
+        return [
+            ("Version", __version__),
+            ("Latest", latest),
+            ("Reading", self.version.name),
+            ("Python", platform.python_version()),
+            ("Project", REPOSITORY_URL),
+        ]
+
+    def about_hints(self) -> tuple[tuple[str, str], ...]:
+        hints = (("o", "open link"), ("y", "copy link"), ("esc", "close"))
+        if self.update_check is not None and self.update_check.update_available:
+            hints = (("u", "update"), *hints)
+        return hints
+
+    def draw_about_modal(self, height: int, width: int) -> None:
+        rows = self.about_rows()
+        label_w = max(len(label) for label, _ in rows)
+        tagline = "A dependency-free terminal Bible reader"
+        hints = self.about_hints()
+        hint_w = sum(len(key) + len(label) + 3 for key, label in hints)
+        content_w = max(len(tagline), label_w + 2 + max(len(value) for _, value in rows), hint_w)
+        modal_w = min(content_w + 6, max(20, width - 4))
+        modal_h = len(rows) + 6
+        y = max(1, (height - modal_h) // 2)
+        x = max(0, (width - modal_w) // 2)
+        win = self.stdscr.derwin(modal_h, modal_w, y, x)
+        win.erase()
+        border_attr = curses.color_pair(5) | curses.A_BOLD
+        win.attron(border_attr)
+        win.box()
+        win.attroff(border_attr)
+        win.addnstr(0, 2, " About ", max(0, modal_w - 4), curses.color_pair(2) | curses.A_BOLD)
+        inner = max(0, modal_w - 6)
+        win.addnstr(1, 3, "bible-tui", inner, curses.color_pair(PAIR_HEADING) | curses.A_BOLD)
+        win.addnstr(2, 3, tagline, inner, curses.color_pair(4) | curses.A_DIM)
+        value_x = 3 + label_w + 2
+        for row, (label, value) in enumerate(rows):
+            win.addnstr(row + 4, 3, label, inner, curses.color_pair(4) | curses.A_DIM)
+            attr = curses.color_pair(3) if label == "Latest" and "u to update" in value else curses.color_pair(2)
+            win.addnstr(row + 4, value_x, value, max(0, modal_w - value_x - 2), attr)
+        self.draw_modal_hints(win, modal_h - 2, modal_w, hints)
+
+    def open_about_modal(self) -> None:
+        self.pending_y = False
+        self.command_modal_open = False
+        self.about_open = True
+
+    def handle_about_key(self, key: int) -> bool:
+        if key in (27, ord("q"), ord("\n"), curses.KEY_ENTER, 10, 13):
+            self.about_open = False
+        elif key == ord("o"):
+            if not open_url(REPOSITORY_URL):
+                self.show_error("couldn't open a browser; the link is in the About box")
+        elif key == ord("y"):
+            self.yank_to_clipboard(REPOSITORY_URL, "project link")
+        elif key == ord("u") and self.update_check is not None and self.update_check.update_available:
+            self.about_open = False
+            return self.run_update()
+        return True
+
     def draw_modal_hints(self, win: curses.window, y: int, modal_w: int, hints: tuple[tuple[str, str], ...]) -> None:
         hint = "  ".join(f"{key} {label}" for key, label in hints)
         hint_x = max(1, modal_w - len(hint) - 2)
@@ -3546,6 +3633,29 @@ CLIPBOARD_COMMANDS: tuple[tuple[str, ...], ...] = (
     ("xsel", "--clipboard", "--input"),
     ("clip.exe",),
 )
+
+
+URL_OPENERS: tuple[str, ...] = ("open", "xdg-open", "wslview")  # macOS, Linux, WSL
+
+
+def open_url(url: str) -> bool:
+    """Open ``url`` in the default browser without waiting for it."""
+    for opener in URL_OPENERS:
+        path = shutil.which(opener)
+        if path is None:
+            continue
+        try:
+            subprocess.Popen(
+                [path, url],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            continue
+        return True
+    return False
 
 
 def copy_to_clipboard(text: str) -> bool:
