@@ -55,9 +55,11 @@ Every action also works without Vim keys. The full list is in [docs/keybindings.
 
 ## Adding versions
 
-Copy a Bible database into `~/.config/bible-tui/bibles/` and it appears in the version picker. You can also
-list folders in `config.json` or pass `--bibles-dir`. The format is in
-[docs/bible-databases.md](docs/bible-databases.md).
+Each version is one SQLite file. Copy a database into `~/.config/bible-tui/bibles/` and it appears in the
+version picker. To make one from a published Bible (USFM, USX, OSIS, and others), use
+[bible-tui-bible-converter](https://github.com/codysechelski/bible-tui-bible-converter). See
+[docs/adding-bibles.md](docs/adding-bibles.md) for the steps, and
+[docs/bible-databases.md](docs/bible-databases.md) for the schema.
 
 ## Configuration
 

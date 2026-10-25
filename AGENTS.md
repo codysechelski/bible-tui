@@ -32,7 +32,8 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 - `bible_tui/bibles/` holds the bundled databases (package data, so installs include them). They are copied
   unchanged from the separate converter project; don't edit them by hand.
 - `docs/configuration.md` covers the app home, `config.json`, `state.json`, the search path, and the
-  user-data files (`marks.json`, `highlights.json`). `docs/keybindings.md` has the full key and `:` command
+  user-data files (`marks.json`, `highlights.json`). `docs/adding-bibles.md` walks through converting a
+  Bible with the companion bible-tui-bible-converter repo. `docs/keybindings.md` has the full key and `:` command
   tables (the README keeps only the essentials). `docs/bible-databases.md` covers the database schema, metadata keys, and the bundled
   versions.
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and

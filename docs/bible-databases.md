@@ -4,6 +4,9 @@ Each version is a single SQLite file. To add a version, copy its database into `
 any folder from [configuration.md](configuration.md#where-bible-databases-are-found)) and restart bible-tui. It
 appears in the version picker (`t`) and in `bible-tui --list-versions`.
 
+To convert a published Bible (USFM, USX, OSIS, and others) into a database, see
+[adding-bibles.md](adding-bibles.md).
+
 Files ending in `.sqlite`, `.sqlite3`, or `.db` are considered. bible-tui opens them read-only and never changes
 them.
 
