@@ -18,7 +18,7 @@ something. Run `bible-tui --paths` to see which folder is in use and what it con
 ```text
 ~/.config/bible-tui/
 ├── config.json      # your settings; bible-tui only ever reads this file
-├── state.json       # remembered by the app (the last version you switched to, the split)
+├── state.json       # remembered by the app (the last version you switched to, the split, the update check)
 ├── marks.json       # your marked verses
 ├── highlights.json  # your highlighted verses and their colors
 └── bibles/          # drop extra Bible databases here
@@ -39,7 +39,8 @@ Every key is optional. A missing file means all defaults.
   "book_order": "bible",
   "nerd_font": false,
   "remember_split": false,
-  "yank_format": "{text}"
+  "yank_format": "{text}",
+  "check_for_updates": true
 }
 ```
 
@@ -51,6 +52,7 @@ Every key is optional. A missing file means all defaults.
 | `nerd_font` | `false` | Set to `true` if your terminal uses a [Nerd Font](https://www.nerdfonts.com/) to get icons: the bookmark for marked verses, search and go-to icons, a check mark for the current version, clipboard and warning icons on messages, and an icon on verses a split pane's version leaves out. Off by default because a terminal program can't detect the font, and a missing glyph shows as an empty box. Without it, plain Unicode symbols (`●`) are used. |
 | `yank_format` | `"{text}"` | What `yy` copies for the current verse. See [The `yy` copy format](#the-yy-copy-format). |
 | `remember_split` | `false` | Set to `true` to reopen a split (`ctrl+w v` or `ctrl+w s`) at launch, with the same orientation and second-pane version. The split is saved in `state.json` as `split` and `split_version`. |
+| `check_for_updates` | `true` | Look for a newer release at launch. See [Update checks](#update-checks). Set to `false` to never contact the network. |
 
 Unknown keys are ignored with a warning. Invalid JSON or a value of the wrong type stops the app with a message
 naming the file, line, and key. Use `--config FILE` to read a different file.
@@ -84,6 +86,26 @@ In a split, the fields come from the focused pane's version. Some examples:
 | `"{text} —{book_abbr} {chapter}:{verse}"` | `For God so loved... —John 3:16` |
 
 An unknown field such as `{txt}` stops the app at startup with a message that lists the fields.
+
+### Update checks
+
+At launch, bible-tui asks GitHub for its latest release
+(`https://api.github.com/repos/codysechelski/bible-tui/releases/latest`). The request runs in the background, at
+most once a day, and sends nothing but the request itself (its `User-Agent` names the bible-tui version). The
+answer is kept in `state.json` as `last_update_check` and `latest_version`. If you're offline, the check fails
+quietly and runs again at the next launch.
+
+When a newer version exists, the footer says so. `:update` (also in `ctrl+p`) installs it and restarts bible-tui
+at the same verse:
+
+| Installed with | `:update` runs |
+| --- | --- |
+| `pipx install git+https://github.com/codysechelski/bible-tui` | `pipx upgrade bible-tui` (an install pinned to a tag is reinstalled from the repository) |
+| a git clone, run with `./bible-tui` | `git pull --ff-only` in the clone |
+| anything else | nothing; the footer shows how to update |
+
+If the update command fails, its output stays on screen until you press Enter, and bible-tui keeps running the
+old version.
 
 ## Which version opens at launch
 

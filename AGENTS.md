@@ -26,6 +26,11 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 - `bible_tui/highlights.py` holds `HighlightStore` and `HIGHLIGHT_COLORS`: the same pattern for `highlights.json`,
   storing color names (never curses numbers). `apply` restores the old state if saving fails. Unknown color names
   in the file are kept, and drawn underlined.
+- `bible_tui/update.py` holds the release check (`UpdateCheck`: a background thread at most once a day, cached
+  in `state.json`, applied only from the main thread through `poll`) and `detect_install`, which picks the
+  `:update` command (`pipx upgrade` for a pipx venv, `git pull --ff-only` for a clone, otherwise none). After a
+  successful `:update`, `run_tui` re-execs the app with `BIBLE_TUI_UPDATED_FROM` and
+  `BIBLE_TUI_RESTORE_POSITION` set, so the new process reports the change and reopens at the same verse.
 - `bible_tui/store.py` holds `BibleStore` (read-only queries for one version), the `Book`/`Verse`/`BibleVerse`
   models, and `BOOK_ABBREVIATIONS`.
 - `bible_tui/tui.py` is the curses UI (`BibleTui`) plus the pure search/fuzzy/alignment helpers.
@@ -79,6 +84,9 @@ disabled.
   app home, saved with `config.write_json`.
 - Commands that only report (`--paths`, `--list-versions`) must not create the app home.
 - A broken or unrecognised database in a Bible folder is reported under "Skipped" and never stops startup.
+- The update check is the only network access, and it lives in `update.py`. It must never delay startup or
+  block the UI, must respect `check_for_updates`, and only runs from `run_tui` (never for `--paths`,
+  `--list-versions`, or in tests). Tests inject `fetch`; never call the real API from a test.
 
 ## TUI Notes
 
@@ -157,6 +165,9 @@ disabled.
   the `remember_split` setting is true; `remembered_split` restores it at launch.
 - Clipboard support tries `pbcopy`, `wl-copy`, `xclip`, `xsel`, then `clip.exe` (`copy_to_clipboard`). If none
   works, the status bar says `clipboard unavailable`.
+- `:update` (`BibleTui.run_update`) leaves curses (`def_prog_mode`/`endwin`) to show the update command's
+  output, and must re-enter (`reset_prog_mode` plus `refresh`) before returning, or `curses.wrapper`'s own
+  `endwin()` fails. Update notices use `MESSAGE_UPDATE` (10 s) and never replace a message already showing.
 - Be careful with terminal sizing logic and bottom-right curses writes; `add_screen_line` intentionally avoids
   the bottom-right cell.
 

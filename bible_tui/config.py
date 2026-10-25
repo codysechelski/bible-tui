@@ -46,6 +46,7 @@ class Settings:
     nerd_font: bool = False
     remember_split: bool = False
     yank_format: str = DEFAULT_YANK_FORMAT
+    check_for_updates: bool = True
     warnings: tuple[str, ...] = field(default=(), compare=False)
 
 
@@ -82,7 +83,7 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"{path}: expected a JSON object at the top level")
 
     warnings: list[str] = []
-    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "remember_split", "yank_format"}
+    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "remember_split", "yank_format", "check_for_updates"}
     for key in sorted(set(data) - known):
         warnings.append(f"{path}: ignoring unknown setting {key!r}")
 
@@ -118,6 +119,10 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"{path}: yank_format must be a string")
     check_yank_format(path, yank_format)
 
+    check_for_updates = data.get("check_for_updates", True)
+    if not isinstance(check_for_updates, bool):
+        raise ConfigError(f"{path}: check_for_updates must be true or false")
+
     return Settings(
         default_version=default_version or None,
         bibles_dirs=tuple(bibles_dirs),
@@ -125,6 +130,7 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         nerd_font=nerd_font,
         remember_split=remember_split,
         yank_format=yank_format,
+        check_for_updates=check_for_updates,
         warnings=tuple(warnings),
     )
 

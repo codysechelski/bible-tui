@@ -19,6 +19,7 @@ from bible_tui.config import DEFAULT_YANK_FORMAT
 from bible_tui.highlights import HIGHLIGHT_COLORS, HighlightError, HighlightStore
 from bible_tui.marks import MarkError, MarkStore, VerseKey
 from bible_tui.store import BOOK_ABBREVIATIONS, BibleStore, BibleVerse, Book, Verse
+from bible_tui.update import MANUAL_UPDATE, Install, UpdateCheck
 from bible_tui.versions import BibleVersion, find_version
 
 FOCUS_BOOKS = 0
@@ -82,13 +83,16 @@ GLYPHS: dict[str, tuple[str, str]] = {
     "yank": ("\uf0ea", ""),  # nf-fa-clipboard: copied-to-clipboard messages
     "error": ("\uf071", ""),  # nf-fa-warning: failure messages
     "current": ("\uf00c", "*"),  # nf-fa-check: the version a pane shows now, in the version picker
+    "update": ("\uf0aa", ""),  # nf-fa-arrow_circle_up: the new-release message
 }
 
 # Footer messages: what an action did. They fade after a few seconds; failures stay longer.
 MESSAGE_INFO = "info"
 MESSAGE_YANK = "yank"
 MESSAGE_ERROR = "error"
-MESSAGE_SECONDS = {MESSAGE_INFO: 3.0, MESSAGE_YANK: 3.0, MESSAGE_ERROR: 6.0}
+MESSAGE_UPDATE = "update"
+MESSAGE_SECONDS = {MESSAGE_INFO: 3.0, MESSAGE_YANK: 3.0, MESSAGE_ERROR: 6.0, MESSAGE_UPDATE: 10.0}
+UPDATE_POLL_MS = 250  # How often the run loop looks for the background update check's answer.
 MISSING_SHADE = "\u2591"  # ░ fills a verse that one split pane's version leaves out
 
 # A split shows a second text pane beside (vertical) or below (horizontal) the first.
@@ -182,6 +186,7 @@ EX_COMMANDS: tuple[ExCommand, ...] = (
     ExCommand("only", "on", "", "close the other pane"),
     ExCommand("marks", "marks", "", "list marks"),
     ExCommand("highlights", "hi", "", "list highlights"),
+    ExCommand("update", "up", "", "update bible-tui and restart"),
 )
 
 
@@ -270,6 +275,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
         (
             Command("commands", "ctrl+p / ?", "commands"),
             Command("command line", ":", "command_line"),
+            Command("update bible-tui", ":update", "update"),
             Command("quit", "q", "quit"),
         ),
     ),
@@ -337,6 +343,8 @@ class BibleTui:
         highlights: HighlightStore | None = None,
         nerd_font: bool = False,
         yank_format: str = DEFAULT_YANK_FORMAT,
+        update_check: UpdateCheck | None = None,
+        install: Install | None = None,
     ) -> None:
         self.stdscr = stdscr
         self._message = ""
@@ -348,6 +356,10 @@ class BibleTui:
         self.versions: tuple[BibleVersion, ...] = tuple(versions) or (version,)
         self.on_version_change = on_version_change
         self.on_split_change = on_split_change
+        self.update_check = update_check
+        self.install = install
+        self.restart_requested = False  # Set by a successful :update; the CLI restarts the app.
+        self.restart_position: tuple[int | None, int | None, int | None] = (None, None, None)
         self.marks = marks if marks is not None else MarkStore(None)
         self.highlights = highlights if highlights is not None else HighlightStore(None)
         self.glyphs = {name: icon if nerd_font else plain for name, (icon, plain) in GLYPHS.items()}
@@ -450,6 +462,54 @@ class BibleTui:
             return -1
         return max(1, int((self.message_until - time.monotonic()) * 1000) + 1)
 
+    def input_timeout_ms(self) -> int:
+        """The ``getch`` timeout: until the message fades, or sooner while an update check is out."""
+        timeout = self.message_timeout_ms()
+        if self.update_check is not None and self.update_check.pending:
+            timeout = UPDATE_POLL_MS if timeout < 0 else min(timeout, UPDATE_POLL_MS)
+        return timeout
+
+    def poll_update_check(self) -> None:
+        """Announce a newer release once, without covering a message that's showing."""
+        if self.update_check is None or self._message:
+            return
+        latest = self.update_check.poll()
+        if latest is not None:
+            self.set_message(f"bible-tui {latest} is out: :update", MESSAGE_UPDATE)
+
+    def run_update(self) -> bool:
+        """``:update``: run the install's update command outside curses. False means restart now."""
+        check = self.update_check
+        if check is not None and check.latest is not None and not check.update_available:
+            self.message = f"bible-tui {check.current} is up to date"
+            return True
+        if self.install is None:
+            self.show_error(f"can't update this install automatically; use {MANUAL_UPDATE}")
+            return True
+        curses.def_prog_mode()
+        curses.endwin()
+        print(f"Updating bible-tui: {self.install.command_text}\n", flush=True)
+        try:
+            code = subprocess.run(self.install.command).returncode
+        except OSError as error:
+            print(error)
+            code = -1
+        if code == 0:
+            # Back into curses mode, so curses.wrapper's own endwin() on the way out succeeds.
+            curses.reset_prog_mode()
+            self.stdscr.refresh()
+            self.restart_requested = True
+            self.restart_position = self.current_position()
+            return False
+        try:
+            input("\nThe update failed. Press Enter to go back to bible-tui.")
+        except EOFError:
+            pass
+        curses.reset_prog_mode()
+        self.stdscr.clear()
+        self.show_error(f"update failed ({self.install.command_text} exited with {code})")
+        return True
+
     def close(self) -> None:
         self.store.close()
         if self.split_pane is not None:
@@ -500,11 +560,12 @@ class BibleTui:
 
         while True:
             self.expire_message()
+            self.poll_update_check()
             self.draw()
-            self.stdscr.timeout(self.message_timeout_ms())
+            self.stdscr.timeout(self.input_timeout_ms())
             key = self.stdscr.getch()
             if key == -1:
-                continue  # Timed out so an expired message can be cleared.
+                continue  # Timed out to clear a message or collect the update check.
             if not self.handle_key(key):
                 return
 
@@ -710,6 +771,8 @@ class BibleTui:
         self.pending_y = False
         if action == "quit":
             return False
+        if action == "update":
+            return self.run_update()
         if action == "select":
             self.activate_selection()
         elif action == "search":
@@ -1792,6 +1855,8 @@ class BibleTui:
             self.open_list_modal(LIST_MARKS)
         elif command.name == "highlights":
             self.open_list_modal(LIST_HIGHLIGHTS)
+        elif command.name == "update":
+            return self.run_update()
         return True
 
     def run_set(self, args: str) -> None:

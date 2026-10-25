@@ -61,6 +61,7 @@ Enter runs the line, and Esc cancels. Commands can be shortened like in Vim (`:q
 | `:vsplit` / `:split` | Split side by side / top and bottom |
 | `:close` / `:only` | Close the focused pane / the other pane |
 | `:marks` / `:highlights` | List marks / highlights |
+| `:update` | Install a newer release and restart at the same verse (see [update checks](configuration.md#update-checks)) |
 
 ## Comparing two versions
 

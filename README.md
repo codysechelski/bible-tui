@@ -29,6 +29,10 @@ bible-tui
 
 Or run it from a clone with `./bible-tui`.
 
+bible-tui checks for new releases once a day and tells you in the footer. Run `:update` to install the new
+version and restart where you were. To turn the check off, set `"check_for_updates": false` (see
+[update checks](docs/configuration.md#update-checks)).
+
 ## Usage
 
 ```sh

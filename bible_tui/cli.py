@@ -14,6 +14,15 @@ from bible_tui import __version__
 from bible_tui.config import ConfigError, Settings, load_settings, load_state, save_state
 from bible_tui.highlights import HighlightStore
 from bible_tui.marks import MarkStore
+from bible_tui.update import (
+    RESTORE_POSITION_ENV,
+    UPDATED_FROM_ENV,
+    UpdateCheck,
+    detect_install,
+    format_position,
+    parse_position,
+    restart_command,
+)
 from bible_tui.paths import (
     BIBLES_DIR_NAME,
     BUNDLED_BIBLES_DIR,
@@ -180,9 +189,12 @@ def run_tui(
     marks: MarkStore,
     highlights: HighlightStore,
     warnings: Sequence[str] = (),
+    notice: str = "",
+    position: tuple[int, int, int] | None = None,
+    restart_args: Sequence[str] = (),
 ) -> None:
     from bible_tui.store import BibleStore
-    from bible_tui.tui import BibleTui
+    from bible_tui.tui import MESSAGE_UPDATE, BibleTui
 
     def remember(chosen: BibleVersion) -> None:
         state["last_version"] = chosen.abbreviation
@@ -199,7 +211,14 @@ def run_tui(
             state["split_version"] = split_version.abbreviation
         save_state(home, state)
 
+    update_check = None
+    if settings.check_for_updates:
+        update_check = UpdateCheck(__version__, state, save=lambda: save_state(home, state))
+        update_check.start()
+    restart = ""  # The position to reopen at, once :update asks for a restart.
+
     def run(stdscr: curses.window) -> None:
+        nonlocal restart
         app = BibleTui(
             stdscr,
             BibleStore(version.path),
@@ -212,22 +231,46 @@ def run_tui(
             highlights=highlights,
             nerd_font=settings.nerd_font,
             yank_format=settings.yank_format,
+            update_check=update_check,
+            install=detect_install(),
         )
         split = remembered_split(settings, state, versions)
         if split is not None:
             app.open_split(*split, restoring=True)
+        if position is not None:
+            app.jump_to_key(position)
         if warnings:
             app.show_error(f"warning: {warnings[0]}")
+        elif notice:
+            app.set_message(notice, MESSAGE_UPDATE)
         try:
             app.run()
         finally:
             app.close()
+        if app.restart_requested:
+            restart = format_position(app.restart_position) or "-"
 
     curses.wrapper(run)
+    if restart:
+        # Replace this process with the updated code. The new one says what changed and reopens here.
+        command = restart_command(restart_args)
+        sys.stdout.flush()
+        os.execve(command[0], command, {**os.environ, UPDATED_FROM_ENV: __version__, RESTORE_POSITION_ENV: restart})
+
+
+def update_notice(env: Mapping[str, str]) -> str:
+    """After ``:update`` restarts the app, say whether the version changed."""
+    previous = env.get(UPDATED_FROM_ENV)
+    if not previous:
+        return ""
+    if previous == __version__:
+        return f"bible-tui {__version__} is up to date"
+    return f"updated bible-tui {previous} to {__version__}"
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     env = os.environ if env is None else env
+    argv = list(sys.argv[1:] if argv is None else argv)
     args = build_parser().parse_args(argv)
     try:
         home = resolve_home(env)
@@ -280,5 +323,17 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         return 1
 
     locale.setlocale(locale.LC_ALL, "")
-    run_tui(version, discovery.versions, settings, home, state, marks, highlights, warnings)
+    run_tui(
+        version,
+        discovery.versions,
+        settings,
+        home,
+        state,
+        marks,
+        highlights,
+        warnings,
+        notice=update_notice(env),
+        position=parse_position(env.get(RESTORE_POSITION_ENV)),
+        restart_args=argv,
+    )
     return 0
