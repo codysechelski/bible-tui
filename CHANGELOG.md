@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.3.0 (2026-10-25)
+
+### Documentation
+
+- Center README badges
+  ([`4a28f4a`](https://github.com/codysechelski/bible-tui/commit/4a28f4a85aff6a040a57ec2143e1ceb24cd9fd27))
+
+### Features
+
+- Check for new releases and add :update to install and restart
+  ([`4394d80`](https://github.com/codysechelski/bible-tui/commit/4394d802ba81663f2b425c6f14cedcee294d8dd3))
+
+
 ## v0.2.0 (2026-10-25)
 
 ### Chores
