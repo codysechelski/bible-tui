@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-10-25)
+
+### Features
+
+- Add About modal with version, update status, and project link
+  ([`fd1e853`](https://github.com/codysechelski/bible-tui/commit/fd1e85394503aadfbc433f186506c7c1e097d56d))
+
+
 ## v0.3.0 (2026-10-25)
 
 ### Documentation
