@@ -41,6 +41,9 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   Bible with the companion bible-tui-bible-converter repo. `docs/keybindings.md` has the full key and `:` command
   tables (the README keeps only the essentials). `docs/bible-databases.md` covers the database schema, metadata keys, and the bundled
   versions.
+- `docs/features/` has one page per feature, linked from `docs/features/index.md` and the README feature list.
+  Pages show the matching GIF from `docs/screenshots/gifs/` and stills from `docs/screenshots/images/`.
+  Screenshots must only show bundled or openly licensed versions.
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and
   `FakeScreen` (lets `BibleTui` logic run without a terminal).
 - `.backlog/` holds Backlog.md tasks.

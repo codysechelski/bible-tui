@@ -9,14 +9,27 @@
 
 A fast, dependency-free terminal Bible reader with Vim-style keys.
 
-<!-- Screenshot goes here -->
+![bible-tui showing Genesis 1 with the books and chapters panes](docs/screenshots/images/main.png)
 
-- **Read and navigate** with arrows or Vim keys, jump to `John 3:16` with autocomplete, and use a Vim-style `:`
-  command line.
-- **Search** within a chapter, or fuzzy-find across the whole Bible with a live preview.
-- **Compare two versions** side by side, with verses lined up.
-- **Mark and highlight** verses in six colors. They're saved and show in every version.
-- **Bring any version**: each one is a SQLite file. The public-domain KJV and ASV are included.
+- **[Read and navigate](docs/features/navigation.md)** with arrows or Vim keys,
+  [jump to `John 3:16`](docs/features/go-to-reference.md) with autocomplete, and use a Vim-style
+  [`:` command line](docs/features/command-line.md).
+- **[Search](docs/features/search.md)** within a chapter, or
+  [fuzzy-find across the whole Bible](docs/features/fuzzy-find.md) with a live preview.
+- **[Compare two versions](docs/features/split-view.md)** side by side, with verses lined up.
+- **[Mark](docs/features/marks.md) and [highlight](docs/features/highlights.md)** verses in six colors. They're
+  saved and show in every version.
+- **[Bring any version](docs/features/versions.md)**, in any language: each one is a SQLite file. The
+  public-domain KJV and ASV are included.
+
+| | |
+| --- | --- |
+| ![Highlight color picker](docs/screenshots/images/multi-color-highlighting.png) | ![List of highlights](docs/screenshots/images/showing-jump-list-of-highlights.png) |
+| [Highlight verses](docs/features/highlights.md) in six colors | [Jump back](docs/features/highlights.md) to any highlight or mark |
+| ![Version picker](docs/screenshots/images/supports-multiple-versions.png) | ![A Portuguese Bible](docs/screenshots/images/support-for-non-english-bibles.png) |
+| [Switch versions](docs/features/versions.md) and keep your place | [Any language](docs/features/versions.md#any-language) works |
+
+**[See all features →](docs/features/index.md)** Each one has a short animation.
 
 ## Install
 
