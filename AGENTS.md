@@ -46,7 +46,7 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   Screenshots must only show bundled or openly licensed versions.
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and
   `FakeScreen` (lets `BibleTui` logic run without a terminal).
-- `.backlog/` holds Backlog.md tasks.
+- `.backlog/` (Backlog.md tasks) and `.agent/` are local-only and ignored by git; public issues live on GitHub.
 - `ROADMAP.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and `LICENSE` (MIT) are at the root.
   `.github/ISSUE_TEMPLATE/` has the bug, feature, and translation-offer issue forms, and
   `.github/pull_request_template.md` has the PR checklist. Keep them in step with the rules in this file.
@@ -57,8 +57,7 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 - Tests: `python3 -m unittest discover -s tests -t .`
 - Syntax check: `python3 -m py_compile bible_tui/*.py tests/*.py`
 
-No linter or formatter is installed. Automated verification (`.agent/verification.json`) is intentionally
-disabled.
+No linter or formatter is installed.
 
 ## Releases
 

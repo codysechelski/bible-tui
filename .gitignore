@@ -1,4 +1,6 @@
+.agent/
 .agent-results/
+.backlog/
 __pycache__/
 *.egg-info/
 build/
