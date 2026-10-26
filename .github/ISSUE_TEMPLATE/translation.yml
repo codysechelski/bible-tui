@@ -1,0 +1,33 @@
+name: Translation offer
+description: Offer to translate bible-tui's menus and help text into a language.
+labels: [translation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for offering to help! Translations are on the
+        [roadmap](https://github.com/codysechelski/bible-tui/blob/main/ROADMAP.md#translations) but not ready
+        to start yet. Opening this issue tells us which languages people want, and lets us contact you once the
+        strings can be translated.
+
+        This is for the app's own text. Bibles in any language can already be added; see
+        [Adding Bibles](https://github.com/codysechelski/bible-tui/blob/main/docs/adding-bibles.md).
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: Spanish (es), Brazilian Portuguese (pt-BR), ...
+    validations:
+      required: true
+  - type: checkboxes
+    id: role
+    attributes:
+      label: How would you like to help?
+      options:
+        - label: Translate
+        - label: Review someone else's translation
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else?
+      description: Your experience with the language, or anything specific to it (right-to-left text, plurals, ...).

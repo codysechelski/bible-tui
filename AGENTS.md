@@ -47,6 +47,9 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and
   `FakeScreen` (lets `BibleTui` logic run without a terminal).
 - `.backlog/` holds Backlog.md tasks.
+- `ROADMAP.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and `LICENSE` (MIT) are at the root.
+  `.github/ISSUE_TEMPLATE/` has the bug, feature, and translation-offer issue forms, and
+  `.github/pull_request_template.md` has the PR checklist. Keep them in step with the rules in this file.
 
 ## Commands
 

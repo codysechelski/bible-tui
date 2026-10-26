@@ -8,9 +8,11 @@ dynamic = ["version"]
 description = "A dependency-free terminal Bible reader with Vim-style navigation and pluggable versions"
 readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "MIT" }
 dependencies = []
 classifiers = [
     "Environment :: Console :: Curses",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",

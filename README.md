@@ -106,9 +106,14 @@ python3 -m py_compile bible_tui/*.py tests/*.py
 ```
 
 Releases are automatic from [Conventional Commits](https://www.conventionalcommits.org/) on `main`: `fix:`
-releases a patch and `feat:` a minor version.
+releases a patch and `feat:` a minor version. See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved, and
+[ROADMAP.md](ROADMAP.md) for what's planned.
 
 ## Bible texts
 
 The bundled KJV and ASV come from [eBible.org](https://ebible.org) and are in the public domain. Sources and
 notes are in [docs/bible-databases.md](docs/bible-databases.md#bundled-versions).
+
+## Licence
+
+bible-tui is released under the [MIT License](LICENSE). The bundled Bible texts are in the public domain.

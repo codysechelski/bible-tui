@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/codysechelski/bible-tui/security/advisories/new
+    about: Please report security problems privately, not in a public issue.
+  - name: Contributing guide
+    url: https://github.com/codysechelski/bible-tui/blob/main/CONTRIBUTING.md
+    about: How to set up, test, and send a change.

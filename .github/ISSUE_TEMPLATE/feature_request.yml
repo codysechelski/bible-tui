@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest a new feature or an improvement.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [roadmap](https://github.com/codysechelski/bible-tui/blob/main/ROADMAP.md) first. It
+        lists features that are already planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: The problem you're trying to solve, or what's missing today.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: How could it work?
+      description: Keys, commands, or settings you have in mind. Every action needs a non-Vim key as well.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other ideas or workarounds
+      description: Anything else you've tried or considered.

@@ -1,0 +1,71 @@
+name: Bug report
+description: Something doesn't work the way it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The keys you pressed or commands you ran, starting from launching the app.
+      placeholder: |
+        1. Run `./bible-tui`
+        2. Press `ctrl+g` and go to John 3:16
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: bible-tui version
+      description: "`:about` inside the app shows it."
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - pipx
+        - Git clone (`./bible-tui`)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15, Ubuntu 24.04, Windows 11 (WSL), ...
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      description: Include tmux or another multiplexer if you use one.
+      placeholder: iTerm2, Ghostty, kitty, GNOME Terminal, ...
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: "`python3 --version`"
+  - type: textarea
+    id: versions
+    attributes:
+      label: Bible versions
+      description: If a Bible didn't load or shows the wrong text, paste the output of `bible-tui --list-versions`.
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Error messages, screenshots, or your `config.json` if it might matter.
