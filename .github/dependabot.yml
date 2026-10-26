@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # bible-tui has no Python dependencies; this keeps the pinned workflow actions current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

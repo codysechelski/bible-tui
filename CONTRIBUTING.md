@@ -67,7 +67,10 @@ Releases are automatic, and the commit messages decide the next version, so plea
 
 - `fix: ...` for a bug fix (patch release)
 - `feat: ...` for a new feature (minor release)
-- `docs:`, `test:`, `refactor:`, `chore:` for changes that don't need a release
+- `docs:`, `test:`, `refactor:`, `ci:`, `chore:` for changes that don't need a release
+
+Pull requests are squash-merged, and the **PR title** becomes the commit message, so the title is what needs
+this format (a check on the PR will tell you if it doesn't). Commit messages inside your branch can be anything.
 
 Don't change `__version__`, `CHANGELOG.md`, or release tags yourself; the release workflow handles them.
 

@@ -62,13 +62,21 @@ disabled.
 
 ## Releases
 
-- Releases are automatic. `.github/workflows/release.yml` runs the tests on every push and pull request. On
-  pushes to `main` it then runs python-semantic-release (config in `[tool.semantic_release]` in
-  `pyproject.toml`). That bumps `__version__` in `bible_tui/__init__.py`, updates `CHANGELOG.md`, commits
-  `chore(release): X.Y.Z`, tags `vX.Y.Z`, and creates a GitHub Release. There is no build step.
+- Releases are automatic. `.github/workflows/release.yml` runs the tests on every push and pull request
+  (Ubuntu and macOS; Python 3.9, 3.13, and 3.14). On pushes to `main` it then runs python-semantic-release
+  (config in `[tool.semantic_release]` in `pyproject.toml`). That bumps `__version__` in
+  `bible_tui/__init__.py`, updates `CHANGELOG.md`, commits `chore(release): X.Y.Z`, tags `vX.Y.Z`, and creates
+  a GitHub Release. When a release was made, the `build` job builds the sdist and wheel from the new tag and
+  the `publish` job uploads them to PyPI with trusted publishing (the `pypi` environment; no stored token).
+  A failed publish can be retried with "Re-run failed jobs" without cutting another release.
+- Every action in the workflows is pinned to a commit SHA with the version in a comment. Dependabot
+  (`.github/dependabot.yml`) opens monthly `ci:` PRs to update them. Keep new actions pinned the same way.
+- `main` is protected by a ruleset (no force pushes or deletion), and `v*` tags can't be moved or deleted.
+- Pull requests are squash-merged with the PR title as the commit message, so the title decides the release.
+  `.github/workflows/pr-title.yml` checks that it's a Conventional Commit.
 - Commit messages must follow Conventional Commits, because they decide the version: `fix:` → patch,
   `feat:` → minor, `!` or a `BREAKING CHANGE:` footer → minor while on 0.x (`major_on_zero = false`).
-  Other types (`docs:`, `chore:`, `test:`, `refactor:`) don't release.
+  Other types (`docs:`, `chore:`, `test:`, `refactor:`, `ci:`, `build:`) don't release.
 - Never edit `__version__`, `CHANGELOG.md`, or `v*` tags by hand.
 
 ## Design Rules
