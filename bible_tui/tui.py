@@ -210,76 +210,76 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
             Command("move down", "j / down", "move_down"),
             Command("move left", "h / left", "move_left"),
             Command("move right", "l / right", "move_right"),
+            Command("open book or chapter", "enter", "select"),
             Command("next pane", "tab", "next_pane"),
             Command("previous pane", "shift+tab", "previous_pane"),
-            Command("next chapter", "]", "next_chapter"),
-            Command("previous chapter", "[", "previous_chapter"),
-            Command("half page up", "ctrl+u", "half_page_up"),
-            Command("half page down", "ctrl+d", "half_page_down"),
             Command("page up", "page up / ctrl+b", "page_up"),
             Command("page down", "page down / ctrl+f", "page_down"),
+            Command("half page up", "ctrl+u", "half_page_up"),
+            Command("half page down", "ctrl+d", "half_page_down"),
             Command("first item", "home / gg", "home"),
             Command("last item", "end / G", "end"),
+            Command("next chapter", "]", "next_chapter"),
+            Command("previous chapter", "[", "previous_chapter"),
         ),
     ),
     (
-        "Text",
+        "Find",
         (
-            Command("start of verse", "0", "start_of_verse"),
-            Command("end of verse", "$", "end_of_verse"),
-            Command("next word", "w", "next_word"),
-            Command("previous word", "b", "previous_word"),
-            Command("end of word", "e", "end_of_word"),
-        ),
-    ),
-    (
-        "Search",
-        (
-            Command("search", "/", "search"),
-            Command("fuzzy find", "ctrl+s", "fuzzy_find"),
             Command("go to reference", "ctrl+g / :John 3:16", "go_to_reference"),
+            Command("fuzzy find", "ctrl+s", "fuzzy_find"),
+            Command("search", "/", "search"),
             Command("next match", "n", "next_match"),
             Command("previous match", "N", "previous_match"),
         ),
     ),
     (
-        "Selection",
+        "Move in text",
         (
-            Command("select", "enter", "select"),
-            Command("visual mode", "v", "visual_mode"),
-            Command("visual verse mode", "V", "visual_line_mode"),
-            Command("yank selection", "y", "yank_selection"),
-            Command("yank verse", "yy", "yank_verse"),
+            Command("next word", "w", "next_word"),
+            Command("previous word", "b", "previous_word"),
+            Command("end of word", "e", "end_of_word"),
+            Command("start of verse", "0", "start_of_verse"),
+            Command("end of verse", "$", "end_of_verse"),
+        ),
+    ),
+    (
+        "Select and copy",
+        (
+            Command("select text", "v", "visual_mode"),
+            Command("select verses", "V", "visual_line_mode"),
+            Command("copy selection", "y", "yank_selection"),
+            Command("copy verse", "yy", "yank_verse"),
+        ),
+    ),
+    (
+        "Marks and highlights",
+        (
             Command("toggle mark", "m", "toggle_mark"),
-            Command("list marks", "M / '", "list_marks"),
             Command("highlight", "c", "highlight"),
+            Command("list marks", "M / '", "list_marks"),
             Command("list highlights", 'C / "', "list_highlights"),
         ),
     ),
     (
-        "View",
+        "Versions and splits",
         (
             Command("switch version", "t", "switch_version"),
-            Command("toggle sort", "a", "toggle_sort"),
-        ),
-    ),
-    (
-        "Panes",
-        (
             Command("split side by side", "ctrl+w v", "split_vertical"),
             Command("split top and bottom", "ctrl+w s", "split_horizontal"),
             Command("switch pane", "ctrl+w w / left / right", "switch_pane"),
             Command("close pane", "ctrl+w q", "close_pane"),
             Command("close other pane", "ctrl+w o", "close_other_pane"),
+            Command("toggle book order", "a", "toggle_sort"),
         ),
     ),
     (
-        "General",
+        "App",
         (
-            Command("commands", "ctrl+p / ?", "commands"),
             Command("command line", ":", "command_line"),
-            Command("update bible-tui", ":update", "update"),
+            Command("commands", "ctrl+p / ?", "commands"),
             Command("about bible-tui", ":about", "about"),
+            Command("update bible-tui", ":update", "update"),
             Command("quit", "q", "quit"),
         ),
     ),
@@ -763,12 +763,9 @@ class BibleTui:
         if key in (27, ord("?")):
             self.close_command_modal()
             return True
-        if key in (curses.KEY_UP, ord("k")):
-            self.command_cursor = clamp(self.command_cursor - 1, 0, len(COMMANDS) - 1)
-            self.ensure_command_visible()
-            return True
-        if key in (curses.KEY_DOWN, ord("j")):
-            self.command_cursor = clamp(self.command_cursor + 1, 0, len(COMMANDS) - 1)
+        if key in (curses.KEY_UP, ord("k"), curses.KEY_DOWN, ord("j")):
+            step = -1 if key in (curses.KEY_UP, ord("k")) else 1
+            self.command_cursor = (self.command_cursor + step) % len(COMMANDS)  # Wraps around at either end.
             self.ensure_command_visible()
             return True
         if key in (ord("\n"), curses.KEY_ENTER, 10, 13):
@@ -3441,6 +3438,9 @@ class BibleTui:
     def ensure_command_visible(self) -> None:
         visible_rows = self.command_visible_rows()
         row = COMMAND_ROW_INDEX[self.command_cursor]
+        if COMMAND_ROWS[row - 1][0] == "heading":
+            # Show the group's heading with its first command.
+            self.command_scroll = scroll_to_cursor(row - 1, self.command_scroll, visible_rows)
         self.command_scroll = scroll_to_cursor(row, self.command_scroll, visible_rows)
 
     def draw_scrollbar(

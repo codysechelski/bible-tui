@@ -9,12 +9,14 @@ from bible_tui.store import BibleStore
 import curses
 
 from bible_tui.tui import (
+    COMMANDS,
     FOCUS_BOOKS,
     FOCUS_CHAPTERS,
     FOCUS_TEXT,
     KEY_CTRL_D,
     KEY_CTRL_F,
     KEY_CTRL_G,
+    KEY_CTRL_P,
     KEY_CTRL_S,
     KEY_CTRL_U,
     KEY_TAB,
@@ -159,6 +161,14 @@ class KeybindingTest(unittest.TestCase):
         self.assertEqual((self.app.location_label(), self.cursor_word()), ("Genesis 1:1", "."))
         self.press("0")
         self.assertEqual(self.app.text_cursor_col, 0)
+
+    def test_commands_list_wraps_around(self) -> None:
+        self.press(KEY_CTRL_P, curses.KEY_UP)
+        self.assertEqual(self.app.command_cursor, len(COMMANDS) - 1)
+        self.press(curses.KEY_DOWN)
+        self.assertEqual((self.app.command_cursor, self.app.command_scroll), (0, 0))  # Heading shows too.
+        self.press("k", "j", "j")
+        self.assertEqual(self.app.command_cursor, 1)
 
     def test_h_at_start_of_verse_moves_focus_left(self) -> None:
         self.go_to("Genesis", 1, 1)

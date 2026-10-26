@@ -107,7 +107,9 @@ No linter or formatter is installed.
 - Highlighting a book previews that book immediately: the chapters pane loads, chapter 1 is selected, and the
   text pane shows chapter 1 without moving focus away from books. Focus only moves from books on Enter, right
   arrow, or `l`.
-- Keybinding help lives in the `ctrl+p` commands modal, not in the top header. The footer prompt keeps
+- Keybinding help lives in the `ctrl+p` commands modal (`COMMAND_GROUPS`), not in the top header. Groups run
+  from everyday navigation to app commands, with plain-language names ("copy verse", not "yank"). Up/Down wrap
+  around at either end, and a group's heading scrolls into view with its first command. The footer prompt keeps
   `ctrl+p` white and `commands` in the dim footer gray.
 - Footer layout (`draw_status`), Vim-style: the mode (`-- VISUAL --`) on the left. The place info
   (version, reference, focus) is right-aligned just before the `ctrl+p` hint, and the timed message sits
