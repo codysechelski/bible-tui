@@ -100,6 +100,7 @@ at the same verse:
 
 | Installed with | `:update` runs |
 | --- | --- |
+| `pipx install bible-tui` | `pipx upgrade bible-tui` |
 | `pipx install git+https://github.com/codysechelski/bible-tui` | `pipx upgrade bible-tui` (an install pinned to a tag is reinstalled from the repository) |
 | a git clone, run with `./bible-tui` | `git pull --ff-only` in the clone |
 | anything else | nothing; the footer shows how to update |

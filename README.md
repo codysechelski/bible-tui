@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://github.com/codysechelski/bible-tui/releases"><img alt="Release" src="https://img.shields.io/github/v/release/codysechelski/bible-tui?sort=semver"></a>
   <a href="https://github.com/codysechelski/bible-tui/actions/workflows/release.yml"><img alt="CI" src="https://github.com/codysechelski/bible-tui/actions/workflows/release.yml/badge.svg"></a>
+  <a href="https://pypi.org/project/bible-tui/"><img alt="PyPI" src="https://img.shields.io/pypi/v/bible-tui"></a>
   <a href="https://github.com/codysechelski/bible-tui/blob/main/pyproject.toml"><img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue"></a>
   <a href="https://github.com/codysechelski/bible-tui/blob/main/pyproject.toml"><img alt="Dependencies: none" src="https://img.shields.io/badge/dependencies-none-brightgreen"></a>
 </p>
@@ -40,11 +41,12 @@ A fast, dependency-free terminal Bible reader with Vim-style keys.
 Requires Python 3.9+ on macOS or Linux, and nothing else.
 
 ```sh
-pipx install git+https://github.com/codysechelski/bible-tui
+pipx install bible-tui
 bible-tui
 ```
 
-Or run it from a clone with `./bible-tui`.
+Or run it from a clone with `./bible-tui`. `pip install bible-tui` works too, but pipx keeps it in its own
+environment.
 
 bible-tui checks for new releases once a day and tells you in the footer. Run `:update` to install the new
 version and restart where you were. To turn the check off, set `"check_for_updates": false` (see
