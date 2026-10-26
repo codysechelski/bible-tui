@@ -33,7 +33,8 @@ body:
     attributes:
       label: How did you install it?
       options:
-        - pipx
+        - pipx from PyPI (`pipx install bible-tui`)
+        - pipx from GitHub (`pipx install git+https://...`)
         - Git clone (`./bible-tui`)
         - Other
     validations:
