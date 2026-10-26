@@ -16,6 +16,10 @@ This is the Portuguese Bíblia Livre:
 
 ![Reading Romans 10 in Portuguese](../screenshots/images/support-for-non-english-bibles.png)
 
+<sub>Screenshot text: Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco Teles, from
+[eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not bundled with bible-tui.</sub>
+
 ## Adding more
 
 Copy a database into `~/.config/bible-tui/bibles/` and it appears in the picker. To make one from a published

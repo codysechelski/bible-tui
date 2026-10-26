@@ -29,6 +29,10 @@ A fast, dependency-free terminal Bible reader with Vim-style keys.
 | ![Version picker](docs/screenshots/images/supports-multiple-versions.png) | ![A Portuguese Bible](docs/screenshots/images/support-for-non-english-bibles.png) |
 | [Switch versions](docs/features/versions.md) and keep your place | [Any language](docs/features/versions.md#any-language) works |
 
+<sub>The Portuguese screenshot shows the Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco Teles, from
+[eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not bundled with bible-tui.</sub>
+
 **[See all features →](docs/features/index.md)** Each one has a short animation.
 
 ## Install
