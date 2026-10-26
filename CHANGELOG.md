@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v0.6.0 (2026-10-26)
+
+### Build System
+
+- Add PyPI metadata and absolute README links
+  ([`147acec`](https://github.com/codysechelski/bible-tui/commit/147acec6ed332214f9732fdcebbd5900eb5a6779))
+
+### Chores
+
+- Stop tracking local .backlog and .agent files
+  ([`b10dc3d`](https://github.com/codysechelski/bible-tui/commit/b10dc3dc917563c7f6744e3062b694f48de2390e))
+
+### Continuous Integration
+
+- Bump the actions group with 2 updates ([#1](https://github.com/codysechelski/bible-tui/pull/1),
+  [`bb8b35d`](https://github.com/codysechelski/bible-tui/commit/bb8b35dc45f49475cad89b589b2368aa85bd3d5c))
+
+- Pin actions to SHAs, test on macOS and Python 3.14, check PR titles, and publish to PyPI
+  ([`a81579b`](https://github.com/codysechelski/bible-tui/commit/a81579be2ab071c6a9cc87b911b47468e25bdcd1))
+
+### Documentation
+
+- Add MIT license, contributing guide, code of conduct, security policy, and roadmap
+  ([`0e8cb60`](https://github.com/codysechelski/bible-tui/commit/0e8cb6068254db9246ff2be547fb1e893edb0206))
+
+- Credit the Bíblia Livre shown in screenshots
+  ([`43e623c`](https://github.com/codysechelski/bible-tui/commit/43e623c03c02039e56c76d48e29193d37650e87a))
+
+### Features
+
+- Regroup the commands list and wrap around at either end
+  ([`c931bfd`](https://github.com/codysechelski/bible-tui/commit/c931bfd814b55b56ad2943b99ce3f3b004345a19))
+
+
 ## v0.5.0 (2026-10-26)
 
 ### Documentation
