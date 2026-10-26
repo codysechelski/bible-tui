@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.5.0 (2026-10-26)
+
+### Documentation
+
+- Add screenshots and feature pages
+  ([`09a8e41`](https://github.com/codysechelski/bible-tui/commit/09a8e41b30025239b781fb17b719f1864932b9d1))
+
+### Features
+
+- H at the start of a verse moves focus back a pane
+  ([`60f1970`](https://github.com/codysechelski/bible-tui/commit/60f1970a717c3d9af90f5213aaff7f2dd8d76d19))
+
+
 ## v0.4.0 (2026-10-25)
 
 ### Features
