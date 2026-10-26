@@ -160,6 +160,17 @@ class KeybindingTest(unittest.TestCase):
         self.press("0")
         self.assertEqual(self.app.text_cursor_col, 0)
 
+    def test_h_at_start_of_verse_moves_focus_left(self) -> None:
+        self.go_to("Genesis", 1, 1)
+        self.press("l", "h")
+        self.assertEqual((self.app.focus, self.app.text_cursor_col), (FOCUS_TEXT, 0))
+        self.press("v", "h")
+        self.assertEqual(self.app.focus, FOCUS_TEXT)  # Not while selecting.
+        self.press(27, "h")
+        self.assertEqual(self.app.focus, FOCUS_CHAPTERS)
+        self.press("h")
+        self.assertEqual(self.app.focus, FOCUS_BOOKS)
+
     def test_visual_verse_mode_selects_whole_verses(self) -> None:
         self.go_to("John", 11, 35)
         self.press("w", "V", "j")

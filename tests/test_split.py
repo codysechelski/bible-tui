@@ -11,6 +11,7 @@ from bible_tui.config import ConfigError, Settings, load_settings
 from bible_tui.store import BibleStore, Verse
 from bible_tui.tui import (
     FOCUS_BOOKS,
+    FOCUS_CHAPTERS,
     FOCUS_TEXT,
     KEY_CTRL_W,
     KEY_TAB,
@@ -134,6 +135,12 @@ class SplitTest(unittest.TestCase):
         self.split_with_asv()
         self.press("l", "l")
         self.assertEqual((self.app.active_pane, self.app.text_cursor_col), (1, 2))
+        self.press("h", "h")
+        self.assertEqual((self.app.active_pane, self.app.text_cursor_col), (1, 0))
+        self.press("h")  # At the start of the verse, h goes back a pane.
+        self.assertEqual((self.app.focus, self.app.active_pane), (FOCUS_TEXT, 0))
+        self.press("h")
+        self.assertEqual(self.app.focus, FOCUS_CHAPTERS)
 
     def test_visual_selection_yanks_the_focused_version(self) -> None:
         self.go_to("John", 3, 16)

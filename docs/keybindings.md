@@ -27,7 +27,7 @@ Neovim users get the usual alternatives too. `ctrl+p` (or `?`) lists them all in
 
 | Action | Keys |
 | --- | --- |
-| Move the cursor by character | `h` / `l` |
+| Move the cursor by character (`h` at the start of a verse goes back a pane) | `h` / `l` |
 | Start / end of the verse | `0` / `$` |
 | Next word / previous word / end of word | `w` / `b` / `e` |
 | Select text / select whole verses | `v` / `V` (press again or Esc to cancel) |

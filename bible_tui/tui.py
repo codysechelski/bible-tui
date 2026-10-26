@@ -663,7 +663,10 @@ class BibleTui:
                 return True
         if key in (ord("h"), ord("l")) and self.focus == FOCUS_TEXT and self.verses:
             self.pending_y = False
-            self.move_text_cursor(-1 if key == ord("h") else 1)
+            if key == ord("h") and self.text_cursor_col == 0 and not self.visual_mode:
+                self.move_focus_left()  # Already at the start of the verse: go back a pane.
+            else:
+                self.move_text_cursor(-1 if key == ord("h") else 1)
             return True
         if key in (ord("0"), ord("$")) and self.focus == FOCUS_TEXT and self.verses:
             self.pending_y = False

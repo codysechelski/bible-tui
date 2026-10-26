@@ -161,7 +161,8 @@ disabled.
   (empty text) drawn shaded with `MISSING_SHADE`. `text_lines` pads each verse to the taller pane so rows
   line up and `text_scroll` is shared. `active_pane` picks the pane for visual mode, yank, `/` search
   (`search_pane`), and fuzzy find; code that reads verse text uses `active_verses`, not `verses`. Left/Right
-  and Tab move between text panes; `h`/`l` stay character motions. Opening a split shows the version picker
+  and Tab move between text panes; `h`/`l` stay character motions, except `h` at column 0 (outside visual
+  mode) moves focus left like Left. Opening a split shows the version picker
   in `PICK_NEW_PANE` mode; `t` while split uses `PICK_PANES` (two columns). Closing the first pane switches the
   main version to the second pane's. A split that no longer fits the terminal draws only the focused pane
   (`text_pane_rects`). `on_split_change` lets the CLI save `split`/`split_version` to `state.json`, only when
