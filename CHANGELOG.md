@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.7.0 (2026-10-27)
+
+### Documentation
+
+- Install from PyPI
+  ([`271931c`](https://github.com/codysechelski/bible-tui/commit/271931c42a25a84fd8c680113f5b27b6ef638eb0))
+
+### Features
+
+- Remember the reading position across launches
+  ([`10666b1`](https://github.com/codysechelski/bible-tui/commit/10666b12b91f70a92ffa1870a587fdd67b7a1896))
+
+
 ## v0.6.0 (2026-10-26)
 
 ### Build System
