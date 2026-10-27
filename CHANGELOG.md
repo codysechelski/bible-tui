@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.7.1 (2026-10-27)
+
+### Bug Fixes
+
+- Keep the testament heading visible after jumping to the top of the books list
+  ([`7fc312f`](https://github.com/codysechelski/bible-tui/commit/7fc312f6f737f0fe855a5744eef3031a5b0fe67c))
+
+
 ## v0.7.0 (2026-10-27)
 
 ### Documentation
