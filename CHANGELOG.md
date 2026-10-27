@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.8.0 (2026-10-27)
+
+### Documentation
+
+- Add a combined features GIF
+  ([`e1f403a`](https://github.com/codysechelski/bible-tui/commit/e1f403a1b977afe66a497609d65c00ed50d366ea))
+
+### Features
+
+- Update Homebrew installs with :update
+  ([`395876b`](https://github.com/codysechelski/bible-tui/commit/395876be664e5acaff822001526005d4d09dee39))
+
+
 ## v0.7.1 (2026-10-27)
 
 ### Bug Fixes
