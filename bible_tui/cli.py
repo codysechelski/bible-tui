@@ -139,6 +139,14 @@ def remembered_split(
     return (split, version) if version is not None else None
 
 
+def remembered_position(settings: Settings, state: Mapping[str, object]) -> tuple[int, int, int] | None:
+    """The verse to reopen at launch, when ``remember_position`` is on."""
+    if not settings.remember_position:
+        return None
+    position = state.get("position")
+    return parse_position(position) if isinstance(position, str) else None
+
+
 def describe(path: Path) -> str:
     home = str(Path.home())
     text = str(path)
@@ -211,6 +219,16 @@ def run_tui(
             state["split_version"] = split_version.abbreviation
         save_state(home, state)
 
+    def remember_position(current: tuple[int | None, int | None, int | None]) -> None:
+        formatted = format_position(current)
+        if not formatted or state.get("position") == formatted:
+            return
+        state["position"] = formatted
+        try:
+            save_state(home, state)
+        except OSError:
+            pass  # State is disposable; never fail on the way out.
+
     update_check = None
     if settings.check_for_updates:
         update_check = UpdateCheck(__version__, state, save=lambda: save_state(home, state))
@@ -239,6 +257,11 @@ def run_tui(
             app.open_split(*split, restoring=True)
         if position is not None:
             app.jump_to_key(position)
+        else:
+            last_position = remembered_position(settings, state)
+            if last_position is not None:
+                app.jump_to_key(last_position)
+                app.message = ""
         if warnings:
             app.show_error(f"warning: {warnings[0]}")
         elif notice:
@@ -246,6 +269,8 @@ def run_tui(
         try:
             app.run()
         finally:
+            if settings.remember_position:
+                remember_position(app.current_position())
             app.close()
         if app.restart_requested:
             restart = format_position(app.restart_position) or "-"

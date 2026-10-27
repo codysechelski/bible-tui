@@ -98,6 +98,7 @@ version picker. To make one from a published Bible (USFM, USX, OSIS, and others)
   "book_order": "bible",
   "nerd_font": false,
   "remember_split": false,
+  "remember_position": false,
   "yank_format": "{text}"
 }
 ```

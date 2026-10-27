@@ -18,7 +18,7 @@ something. Run `bible-tui --paths` to see which folder is in use and what it con
 ```text
 ~/.config/bible-tui/
 ├── config.json      # your settings; bible-tui only ever reads this file
-├── state.json       # remembered by the app (the last version you switched to, the split, the update check)
+├── state.json       # remembered by the app (the last version you switched to, your place, the split, the update check)
 ├── marks.json       # your marked verses
 ├── highlights.json  # your highlighted verses and their colors
 └── bibles/          # drop extra Bible databases here
@@ -39,6 +39,7 @@ Every key is optional. A missing file means all defaults.
   "book_order": "bible",
   "nerd_font": false,
   "remember_split": false,
+  "remember_position": false,
   "yank_format": "{text}",
   "check_for_updates": true
 }
@@ -52,6 +53,7 @@ Every key is optional. A missing file means all defaults.
 | `nerd_font` | `false` | Set to `true` if your terminal uses a [Nerd Font](https://www.nerdfonts.com/) to get icons: the bookmark for marked verses, search and go-to icons, a check mark for the current version, clipboard and warning icons on messages, and an icon on verses a split pane's version leaves out. Off by default because a terminal program can't detect the font, and a missing glyph shows as an empty box. Without it, plain Unicode symbols (`●`) are used. |
 | `yank_format` | `"{text}"` | What `yy` copies for the current verse. See [The `yy` copy format](#the-yy-copy-format). |
 | `remember_split` | `false` | Set to `true` to reopen a split (`ctrl+w v` or `ctrl+w s`) at launch, with the same orientation and second-pane version. The split is saved in `state.json` as `split` and `split_version`. |
+| `remember_position` | `false` | Set to `true` to reopen at the verse you were on when you quit. It's saved in `state.json` as `position` (book order, chapter, and verse, so it carries across versions). When it's `false` the app opens at the first book's first chapter. |
 | `check_for_updates` | `true` | Look for a newer release at launch. See [Update checks](#update-checks). Set to `false` to never contact the network. |
 
 Unknown keys are ignored with a warning. Invalid JSON or a value of the wrong type stops the app with a message

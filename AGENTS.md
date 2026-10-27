@@ -179,6 +179,9 @@ No linter or formatter is installed.
   main version to the second pane's. A split that no longer fits the terminal draws only the focused pane
   (`text_pane_rects`). `on_split_change` lets the CLI save `split`/`split_version` to `state.json`, only when
   the `remember_split` setting is true; `remembered_split` restores it at launch.
+- `remember_position` (off by default) saves the current verse to `state.json` as `position` (`sort_order:chapter:verse`)
+  when the TUI exits, and `remembered_position` reopens there at launch. A restart after `:update` uses
+  `BIBLE_TUI_RESTORE_POSITION` instead.
 - Clipboard support tries `pbcopy`, `wl-copy`, `xclip`, `xsel`, then `clip.exe` (`copy_to_clipboard`). If none
   works, the status bar says `clipboard unavailable`.
 - `:update` (`BibleTui.run_update`) leaves curses (`def_prog_mode`/`endwin`) to show the update command's
