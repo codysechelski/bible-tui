@@ -45,8 +45,8 @@ pipx install bible-tui
 bible-tui
 ```
 
-Or run it from a clone with `./bible-tui`. `pip install bible-tui` works too, but pipx keeps it in its own
-environment.
+Or install it with [Homebrew](https://brew.sh) (`brew install codysechelski/tap/bible-tui`), or run it from a
+clone with `./bible-tui`. `pip install bible-tui` works too, but pipx keeps it in its own environment.
 
 bible-tui checks for new releases once a day and tells you in the footer. Run `:update` to install the new
 version and restart where you were. To turn the check off, set `"check_for_updates": false` (see

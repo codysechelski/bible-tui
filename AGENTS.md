@@ -28,9 +28,11 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   in the file are kept, and drawn underlined.
 - `bible_tui/update.py` holds the release check (`UpdateCheck`: a background thread at most once a day, cached
   in `state.json`, applied only from the main thread through `poll`) and `detect_install`, which picks the
-  `:update` command (`pipx upgrade` for a pipx venv, `git pull --ff-only` for a clone, otherwise none). After a
-  successful `:update`, `run_tui` re-execs the app with `BIBLE_TUI_UPDATED_FROM` and
-  `BIBLE_TUI_RESTORE_POSITION` set, so the new process reports the change and reopens at the same verse.
+  `:update` command (`pipx upgrade` for a pipx venv, `brew upgrade` for a Homebrew install, `git pull --ff-only`
+  for a clone, otherwise none). A Homebrew restart runs the `opt/bible-tui` interpreter, because `brew upgrade`
+  deletes the old version's folder. After a successful `:update`, `run_tui` re-execs the app with
+  `BIBLE_TUI_UPDATED_FROM` and `BIBLE_TUI_RESTORE_POSITION` set, so the new process reports the change and
+  reopens at the same verse.
 - `bible_tui/store.py` holds `BibleStore` (read-only queries for one version), the `Book`/`Verse`/`BibleVerse`
   models, and `BOOK_ABBREVIATIONS`.
 - `bible_tui/tui.py` is the curses UI (`BibleTui`) plus the pure search/fuzzy/alignment helpers.

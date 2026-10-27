@@ -24,6 +24,7 @@ from bible_tui.update import (
     is_newer,
     parse_position,
     parse_version,
+    restart_command,
 )
 from bible_tui.versions import discover_versions, find_version
 
@@ -148,6 +149,19 @@ class DetectInstallTest(unittest.TestCase):
             ("/bin/pipx", "install", "--force", "git+https://github.com/codysechelski/bible-tui"),
         )
 
+    def test_homebrew_upgrades_and_restarts_through_opt(self) -> None:
+        prefix = self.tmp / "homebrew"
+        venv = prefix / "Cellar" / "bible-tui" / "0.7.1" / "libexec"
+        venv.mkdir(parents=True)
+        install = detect_install(self.package, str(venv))
+        python = prefix / "opt" / "bible-tui" / "libexec" / "bin" / "python"
+        self.assertEqual(install, Install("homebrew", ("/bin/brew", "upgrade", "bible-tui"), str(python)))
+
+    def test_another_cellar_formula_is_not_homebrew(self) -> None:
+        venv = self.tmp / "homebrew" / "Cellar" / "other-app" / "1.0" / "libexec"
+        venv.mkdir(parents=True)
+        self.assertIsNone(detect_install(self.package, str(venv)))
+
     def test_git_clone_pulls(self) -> None:
         repo = self.package.parent
         (repo / ".git").mkdir()
@@ -162,6 +176,16 @@ class DetectInstallTest(unittest.TestCase):
         self.write_pipx_metadata("bible-tui")
         with mock.patch("bible_tui.update.shutil.which", return_value=None):
             self.assertIsNone(detect_install(self.package, str(self.venv)))
+
+
+class RestartCommandTest(unittest.TestCase):
+    def test_defaults_to_the_running_interpreter(self) -> None:
+        with mock.patch("bible_tui.update.sys.executable", "/venv/bin/python"):
+            self.assertEqual(restart_command(["asv"]), ["/venv/bin/python", "-m", "bible_tui", "asv"])
+
+    def test_uses_the_install_interpreter(self) -> None:
+        command = restart_command(["asv"], "/opt/homebrew/opt/bible-tui/libexec/bin/python")
+        self.assertEqual(command, ["/opt/homebrew/opt/bible-tui/libexec/bin/python", "-m", "bible_tui", "asv"])
 
 
 def make_app(check: UpdateCheck | None = None, install: Install | None = None) -> BibleTui:

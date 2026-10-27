@@ -139,19 +139,20 @@ class UpdateCheck:
 class Install:
     """How this copy of bible-tui was installed, and the command that updates it."""
 
-    kind: str  # "pipx" or "git"
+    kind: str  # "pipx", "homebrew", or "git"
     command: tuple[str, ...]
+    python: str = ""  # The interpreter that runs the updated code; empty means ``sys.executable``.
 
     @property
     def command_text(self) -> str:
         return " ".join(self.command)
 
 
-MANUAL_UPDATE = f"pipx upgrade bible-tui, or git pull in your clone (releases: {RELEASES_PAGE})"
+MANUAL_UPDATE = f"pipx upgrade bible-tui, brew upgrade bible-tui, or git pull in your clone (releases: {RELEASES_PAGE})"
 
 
 def detect_install(package_dir: Path = PACKAGE_DIR, prefix: str = sys.prefix) -> Install | None:
-    """A pipx venv or a git clone can be updated in place; anything else gets ``None``."""
+    """A pipx venv, a Homebrew install, or a git clone can be updated in place; anything else gets ``None``."""
     venv = Path(prefix)
     pipx = shutil.which("pipx")
     metadata = venv / "pipx_metadata.json"
@@ -160,10 +161,24 @@ def detect_install(package_dir: Path = PACKAGE_DIR, prefix: str = sys.prefix) ->
             # `pipx upgrade` would reinstall the same tag, so move it to the latest release.
             return Install("pipx", (pipx, "install", "--force", f"git+https://github.com/{REPOSITORY}"))
         return Install("pipx", (pipx, "upgrade", "bible-tui"))
+    brew_prefix = homebrew_prefix(venv)
+    brew = shutil.which("brew")
+    if brew_prefix is not None and brew:
+        # `brew upgrade` deletes this version's folder, so restart through the stable opt/ link.
+        python = brew_prefix / "opt" / "bible-tui" / "libexec" / "bin" / "python"
+        return Install("homebrew", (brew, "upgrade", "bible-tui"), str(python))
     repo = package_dir.parent
     git = shutil.which("git")
     if (repo / ".git").exists() and (repo / "pyproject.toml").is_file() and git:
         return Install("git", (git, "-C", str(repo), "pull", "--ff-only"))
+    return None
+
+
+def homebrew_prefix(venv: Path) -> Path | None:
+    """The Homebrew prefix, when ``venv`` is a Homebrew formula's ``<prefix>/Cellar/bible-tui/<version>/libexec``."""
+    parts = venv.parts
+    if len(parts) > 4 and parts[-1] == "libexec" and parts[-3] == "bible-tui" and parts[-4] == "Cellar":
+        return Path(*parts[:-4])
     return None
 
 
@@ -191,6 +206,6 @@ def parse_position(text: str | None) -> tuple[int, int, int] | None:
     return book, chapter, verse
 
 
-def restart_command(args: Sequence[str]) -> list[str]:
+def restart_command(args: Sequence[str], python: str = "") -> list[str]:
     """Run the (now updated) package again with the same arguments."""
-    return [sys.executable, "-m", "bible_tui", *args]
+    return [python or sys.executable, "-m", "bible_tui", *args]

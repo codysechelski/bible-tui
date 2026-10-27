@@ -233,6 +233,7 @@ def run_tui(
     if settings.check_for_updates:
         update_check = UpdateCheck(__version__, state, save=lambda: save_state(home, state))
         update_check.start()
+    install = detect_install()
     restart = ""  # The position to reopen at, once :update asks for a restart.
 
     def run(stdscr: curses.window) -> None:
@@ -250,7 +251,7 @@ def run_tui(
             nerd_font=settings.nerd_font,
             yank_format=settings.yank_format,
             update_check=update_check,
-            install=detect_install(),
+            install=install,
         )
         split = remembered_split(settings, state, versions)
         if split is not None:
@@ -278,7 +279,7 @@ def run_tui(
     curses.wrapper(run)
     if restart:
         # Replace this process with the updated code. The new one says what changed and reopens here.
-        command = restart_command(restart_args)
+        command = restart_command(restart_args, install.python if install else "")
         sys.stdout.flush()
         os.execve(command[0], command, {**os.environ, UPDATED_FROM_ENV: __version__, RESTORE_POSITION_ENV: restart})
 
