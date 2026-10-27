@@ -20,7 +20,8 @@ bible-tui is a local terminal app, but a few parts are worth a close look:
 
 - **The update check.** Once a day it asks the GitHub API for the latest release. This is the only network
   access, and it can be turned off with `"check_for_updates": false`.
-- **`:update`.** It runs `pipx install --force` or `git pull --ff-only` to install a new release, then restarts the app.
+- **`:update`.** It runs `pipx upgrade` (or `pipx install --force` for an install pinned to a tag),
+  `brew upgrade`, or `git pull --ff-only` to install a new release, then restarts the app.
 - **Bible databases.** Databases from any source can be added to a Bible folder. They are opened read-only,
   and a malformed one should be skipped, never crash the app or cause harm.
 - **Settings and data files** in the app home (`config.json`, `state.json`, `marks.json`, `highlights.json`).

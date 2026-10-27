@@ -35,6 +35,7 @@ body:
       options:
         - pipx from PyPI (`pipx install bible-tui`)
         - pipx from GitHub (`pipx install git+https://...`)
+        - Homebrew (`brew install codysechelski/tap/bible-tui`)
         - Git clone (`./bible-tui`)
         - Other
     validations:

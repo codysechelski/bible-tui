@@ -38,15 +38,20 @@ A fast, dependency-free terminal Bible reader with Vim-style keys.
 
 ## Install
 
-Requires Python 3.9+ on macOS or Linux, and nothing else.
+bible-tui runs on macOS and Linux. Install it with [Homebrew](https://brew.sh), which brings its own Python:
+
+```sh
+brew install codysechelski/tap/bible-tui
+```
+
+Or with [pipx](https://pipx.pypa.io), using Python 3.9 or newer:
 
 ```sh
 pipx install bible-tui
-bible-tui
 ```
 
-Or install it with [Homebrew](https://brew.sh) (`brew install codysechelski/tap/bible-tui`), or run it from a
-clone with `./bible-tui`. `pip install bible-tui` works too, but pipx keeps it in its own environment.
+Then run `bible-tui`. You can also run it from a clone with `./bible-tui`. `pip install bible-tui` works too, but
+pipx keeps it in its own environment.
 
 bible-tui checks for new releases once a day and tells you in the footer. Run `:update` to install the new
 version and restart where you were. To turn the check off, set `"check_for_updates": false` (see

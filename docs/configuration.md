@@ -104,7 +104,7 @@ at the same verse:
 | --- | --- |
 | `pipx install bible-tui` | `pipx upgrade bible-tui` |
 | `pipx install git+https://github.com/codysechelski/bible-tui` | `pipx upgrade bible-tui` (an install pinned to a tag is reinstalled from the repository) |
-| `brew install codysechelski/tap/bible-tui` | `brew upgrade bible-tui` |
+| `brew install codysechelski/tap/bible-tui` | `brew upgrade bible-tui` (a new release reaches the tap within about a day) |
 | a git clone, run with `./bible-tui` | `git pull --ff-only` in the clone |
 | anything else | nothing; the footer shows how to update |
 
