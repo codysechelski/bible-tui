@@ -2393,6 +2393,9 @@ class BibleTui:
         inner_h = max(1, content_h - 2)
         book_row = self.book_row_index.get(self.book_cursor, self.book_cursor)
         self.book_scroll = scroll_to_cursor(book_row, self.book_scroll, inner_h)
+        # Keep a testament heading in view along with the first book under it.
+        if book_row > 0 and self.book_rows[book_row - 1][0] == "heading" and self.book_scroll == book_row:
+            self.book_scroll = book_row - 1
         self.chapter_scroll = scroll_to_cursor(
             self.chapter_cursor, self.chapter_scroll, inner_h
         )

@@ -132,6 +132,15 @@ class KeybindingTest(unittest.TestCase):
         self.press("g")
         self.assertEqual(self.app.location_label(), "Genesis 1:1")
 
+    def test_gg_in_books_keeps_testament_heading_visible(self) -> None:
+        self.app.focus = FOCUS_BOOKS
+        self.press("G")
+        self.assertGreater(self.app.book_scroll, 1)
+        self.press("g", "g")
+        self.assertEqual(self.app.selected_book.name, "Genesis")
+        self.assertEqual(self.app.book_scroll, 0)
+        self.assertEqual(self.app.book_rows[0], ("heading", "Old Testament"))
+
     def test_g_then_other_key_does_not_jump(self) -> None:
         self.go_to("Genesis", 1, 10)
         self.press("g", "j", "g")
