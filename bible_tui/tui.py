@@ -14,7 +14,7 @@ import textwrap
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 
 from bible_tui import __version__
 from bible_tui.config import DEFAULT_YANK_FORMAT
@@ -188,9 +188,18 @@ EX_COMMANDS: tuple[ExCommand, ...] = (
     ExCommand("only", "on", "", "close the other pane"),
     ExCommand("marks", "marks", "", "list marks"),
     ExCommand("highlights", "hi", "", "list highlights"),
+    ExCommand("potd", "potd", "", "go to the proverb of the day"),
     ExCommand("update", "up", "", "update bible-tui and restart"),
     ExCommand("about", "ab", "", "version and project link"),
 )
+
+
+PROVERBS_SORT_ORDER = 20  # Canonical book order, the same in every version (docs/bible-databases.md).
+
+
+def proverb_of_the_day(today: date) -> VerseKey:
+    """Proverbs has 31 chapters, one for each day of the month: the 28th reads Proverbs 28."""
+    return (PROVERBS_SORT_ORDER, today.day, 1)
 
 
 @dataclass(frozen=True)
@@ -227,6 +236,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
         "Find",
         (
             Command("go to reference", "ctrl+g / :John 3:16", "go_to_reference"),
+            Command("proverb of the day", ":potd", "proverb_of_the_day"),
             Command("fuzzy find", "ctrl+s", "fuzzy_find"),
             Command("search", "/", "search"),
             Command("next match", "n", "next_match"),
@@ -794,6 +804,8 @@ class BibleTui:
             self.open_fuzzy_finder()
         elif action == "go_to_reference":
             self.open_goto_modal()
+        elif action == "proverb_of_the_day":
+            self.go_to_proverb_of_the_day()
         elif action == "next_match":
             self.jump_search_match(1)
         elif action == "previous_match":
@@ -1865,11 +1877,20 @@ class BibleTui:
             self.open_list_modal(LIST_MARKS)
         elif command.name == "highlights":
             self.open_list_modal(LIST_HIGHLIGHTS)
+        elif command.name == "potd":
+            self.go_to_proverb_of_the_day()
         elif command.name == "update":
             return self.run_update()
         elif command.name == "about":
             self.open_about_modal()
         return True
+
+    def go_to_proverb_of_the_day(self) -> None:
+        key = proverb_of_the_day(date.today())
+        if self.key_book(key) is None:
+            self.show_error(f"{self.version.name} doesn't include Proverbs")
+        elif self.jump_to_key(key):
+            self.message = f"proverb of the day: {self.location_label()}"
 
     def run_set(self, args: str) -> None:
         """``:set version`` opens the picker; ``:set version=ASV`` (or ``version ASV``) switches."""

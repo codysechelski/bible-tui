@@ -61,6 +61,7 @@ Enter runs the line, and Esc cancels. Commands can be shortened like in Vim (`:q
 | `:vsplit` / `:split` | Split side by side / top and bottom |
 | `:close` / `:only` | Close the focused pane / the other pane |
 | `:marks` / `:highlights` | List marks / highlights |
+| `:potd` | Go to the proverb of the day: verse 1 of the Proverbs chapter that matches today's date (Proverbs 28 on the 28th) |
 | `:about` | Show the version, whether an update is out, and the project link (`o` opens it, `y` copies it) |
 | `:update` | Install a newer release and restart at the same verse (see [update checks](configuration.md#update-checks)) |
 

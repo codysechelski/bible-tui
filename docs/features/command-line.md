@@ -13,6 +13,7 @@ Commands can be shortened like in Vim (`:q`, `:vs`).
 | `:vsplit` / `:split` | [Split](split-view.md) side by side / top and bottom |
 | `:close` / `:only` | Close this pane / the other pane |
 | `:marks` / `:highlights` | List [marks](marks.md) / [highlights](highlights.md) |
+| `:potd` | Go to the proverb of the day: the chapter of Proverbs that matches today's date (Proverbs 28 on the 28th) |
 | `:about` | Show the app version, update status, and project link |
 | `:update` | Install a newer release and restart at the same verse |
 | `:q` | Quit |

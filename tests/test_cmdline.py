@@ -1,12 +1,26 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from datetime import date
+from pathlib import Path
+from unittest import mock
 
 from bible_tui.store import BibleStore
-from bible_tui.tui import FOCUS_TEXT, KEY_TAB, LIST_MARKS, MESSAGE_ERROR, PICK_NEW_PANE, PICK_VERSION, BibleTui
+from bible_tui.tui import (
+    COMMANDS,
+    FOCUS_TEXT,
+    KEY_TAB,
+    LIST_MARKS,
+    MESSAGE_ERROR,
+    PICK_NEW_PANE,
+    PICK_VERSION,
+    BibleTui,
+    proverb_of_the_day,
+)
 from bible_tui.versions import discover_versions, find_version
 
-from tests.helpers import KJV_PATH, FakeScreen
+from tests.helpers import KJV_PATH, FakeScreen, make_bible
 
 
 class CommandLineTest(unittest.TestCase):
@@ -103,6 +117,38 @@ class CommandLineTest(unittest.TestCase):
         self.app.handle_key(27)
         self.type("marks", 10)
         self.assertEqual(self.app.list_kind, LIST_MARKS)
+
+    def on_day(self, day: int) -> None:
+        fake = mock.patch("bible_tui.tui.date")
+        fake.start().today.return_value = date(2026, 10, day)
+        self.addCleanup(fake.stop)
+
+    def test_potd_goes_to_the_chapter_for_today(self) -> None:
+        self.on_day(28)
+        self.type("POTD", 10)
+        self.assertEqual((self.app.location_label(), self.app.focus), ("Proverbs 28:1", FOCUS_TEXT))
+        self.assertEqual(self.app.message, "proverb of the day: Proverbs 28:1")
+
+    def test_potd_from_the_commands_list(self) -> None:
+        self.on_day(31)
+        self.assertIn("proverb_of_the_day", [item.action for item in COMMANDS])
+        self.app.run_command("proverb_of_the_day")
+        self.assertEqual(self.app.location_label(), "Proverbs 31:1")
+
+    def test_every_day_of_the_month_has_a_chapter(self) -> None:
+        book = self.app.key_book(proverb_of_the_day(date(2026, 1, 1)))
+        chapters = self.app.store.chapters(book.id)
+        for day in range(1, 32):
+            self.assertIn(proverb_of_the_day(date(2026, 1, day))[1], chapters)
+
+    def test_potd_in_a_version_without_proverbs(self) -> None:
+        path = make_bible(Path(tempfile.mkdtemp()) / "bible_tst.sqlite")
+        versions = discover_versions([path.parent]).versions
+        app = BibleTui(FakeScreen(), BibleStore(path), find_version(versions, "TST"), versions)
+        self.addCleanup(app.close)
+        self.on_day(28)
+        app.go_to_proverb_of_the_day()
+        self.assertEqual((app.message, app.message_kind), ("Test Version doesn't include Proverbs", MESSAGE_ERROR))
 
     def test_unknown_input_is_an_error(self) -> None:
         self.type("zzz", 10)
