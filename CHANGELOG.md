@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.9.0 (2026-10-28)
+
+### Documentation
+
+- Add Homebrew install instructions
+  ([`68295b6`](https://github.com/codysechelski/bible-tui/commit/68295b6dc6dd38b40e7459dc89f1eda430ef400e))
+
+### Features
+
+- Add :potd to open the proverb of the day
+  ([`a391a60`](https://github.com/codysechelski/bible-tui/commit/a391a6001d6e6c3e12b6c6d3141e01425b960664))
+
+
 ## v0.8.0 (2026-10-27)
 
 ### Documentation
