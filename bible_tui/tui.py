@@ -44,7 +44,6 @@ PAIR_SEARCH = 8
 PAIR_ERROR = 9
 PAIR_HEADING = 10
 PAIR_SIGN = 11
-PAIR_SIGN_SELECTED = 12
 PAIR_HIGHLIGHT_BASE = 13  # One pair per HIGHLIGHT_COLORS entry, in order.
 
 # Highlight backgrounds: (256-color background, 8-color background, 8-color foreground).
@@ -548,7 +547,6 @@ class BibleTui:
         curses.init_pair(PAIR_ERROR, curses.COLOR_RED, -1)
         curses.init_pair(PAIR_HEADING, curses.COLOR_BLUE, -1)
         curses.init_pair(PAIR_SIGN, curses.COLOR_BLUE, -1)
-        curses.init_pair(PAIR_SIGN_SELECTED, curses.COLOR_BLUE, curses.COLOR_WHITE)
         rich = getattr(curses, "COLORS", 0) >= 256
         for index, name in enumerate(HIGHLIGHT_COLORS):
             tint, background, foreground = HIGHLIGHT_PALETTE[name]
@@ -2604,7 +2602,11 @@ class BibleTui:
                 base_attr = curses.color_pair(6)
             else:
                 base_attr = 0
-            win.addnstr(row + 1, 1, " " * inner_w, inner_w, base_attr)
+            # The sign column keeps the default background so signs stay readable on the current verse.
+            win.addnstr(row + 1, 1, " " * SIGN_WIDTH, min(SIGN_WIDTH, inner_w), 0)
+            bar_w = max(0, inner_w - SIGN_WIDTH)
+            if bar_w:
+                win.addnstr(row + 1, 1 + SIGN_WIDTH, " " * bar_w, bar_w, base_attr)
             if line.missing:
                 shade_attr = base_attr | curses.A_DIM if selected else curses.color_pair(4) | curses.A_DIM
                 if line.verse_number:
@@ -2620,7 +2622,7 @@ class BibleTui:
             if line.verse_number:
                 key = self.verse_key(line.verse_index)
                 if key is not None and self.marks.is_marked(key):
-                    sign_attr = curses.color_pair(PAIR_SIGN_SELECTED if selected else PAIR_SIGN) | curses.A_BOLD
+                    sign_attr = curses.color_pair(PAIR_SIGN) | curses.A_BOLD
                     win.addnstr(row + 1, 1, self.mark_sign, 1, sign_attr)
                 number_attr = base_attr | curses.A_BOLD if selected else curses.color_pair(3) | curses.A_BOLD
                 win.addnstr(row + 1, 1 + SIGN_WIDTH, line.verse_number, NUMBER_WIDTH, number_attr)
