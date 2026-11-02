@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.9.1 (2026-11-02)
+
+### Bug Fixes
+
+- Keep the sign column out of the current-verse bar
+  ([#2](https://github.com/codysechelski/bible-tui/pull/2),
+  [`e5f0fb7`](https://github.com/codysechelski/bible-tui/commit/e5f0fb7ba9dff0374b6726c029849eebf1e6ab4d))
+
+
 ## v0.9.0 (2026-10-28)
 
 ### Documentation
