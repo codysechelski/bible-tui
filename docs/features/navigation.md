@@ -4,7 +4,7 @@ The screen has three panes: books, chapters, and the text. Move through them wit
 Up/Down, and Home/End, or use Vim keys if you know them. Highlighting a book shows its first chapter right away,
 so you can browse without pressing Enter.
 
-![Moving through books, chapters, and verses with arrows or Vim motions, then stepping through chapters with ] and [](../../.tapes/navigation/gifs/navigation-with-keys_small.gif)
+![Moving through books, chapters, and verses with arrows or Vim motions, then stepping through chapters with the bracket keys](../../.tapes/navigation/gifs/navigation-with-keys_small.gif)
 
 | Action | Keys | Vim-style |
 | --- | --- | --- |

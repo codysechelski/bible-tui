@@ -30,14 +30,10 @@ A fast, dependency-free terminal Bible reader with Vim-style keys.
 
 | | |
 | --- | --- |
-| [![Highlight color picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/highlight/screenshots/showing-highlight-options-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) | [![List of highlights](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/highlight/screenshots/showing-highlights-list-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) |
-| [Highlight verses](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) in six colors | [Jump back](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) to any highlight |
-| [![Version picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/version-switching/screenshots/showing-version-picker-modal-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md) | [![The KJV above a Portuguese Bible](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/splits/screenshots/showing-horizontal-split-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md) |
-| [Switch versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md) and keep your place | [Compare two versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md), in any language |
-
-<sub>The Portuguese screenshot shows the Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco Teles, from
-[eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not bundled with bible-tui.</sub>
+| [![Highlight color picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/highlight/screenshots/showing-highlight-options-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) | [![Fuzzy-finding verses across the whole Bible](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/fuzzy-finding/screenshots/showing-fuzzy-find-multi-word-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/fuzzy-find.md) |
+| [Highlight verses](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) in six colors | [Fuzzy-find](https://github.com/codysechelski/bible-tui/blob/main/docs/features/fuzzy-find.md) across the whole Bible |
+| [![The Go To Reference box](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/go-to-reference/screenshots/showing-go-to-reference-modal-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) | [![Two versions side by side](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/splits/screenshots/showing-vertical-split-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md) |
+| [Go to a reference](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) with autocomplete | [Compare two versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md) side by side |
 
 **[See all features →](https://github.com/codysechelski/bible-tui/blob/main/docs/features/index.md)** Each one has a short animation.
 
