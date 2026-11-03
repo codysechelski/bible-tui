@@ -18,7 +18,7 @@ for what's needed. For a bug, that's:
 For a new feature, please describe it in an issue before you start work, so we can agree on the approach. The
 [roadmap](ROADMAP.md) lists what's already planned.
 
-## Getting set up
+For Vim-style navigation proposals, please read the [Vim-inspired navigation philosophy](docs/vim-inspired-navigation.md)\nbefore opening an issue or starting a pull request.\n\n## Getting set up
 
 bible-tui uses only the Python standard library, so there's nothing to install. You need Python 3.9 or newer.
 
