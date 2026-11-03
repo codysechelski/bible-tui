@@ -10,3 +10,4 @@ dist/
 *.mp4
 .tapes/**/.*.stamp
 .tapes/**/.*.recorded
+*_large.gif

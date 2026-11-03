@@ -3,7 +3,7 @@
 `ctrl+s` searches every verse in the current version as you type, with a preview of the selected verse. It's
 built in, so there's nothing extra to install. Enter jumps to the verse.
 
-![Fuzzy-finding verses across the whole Bible](../../.tapes/fuzzy-finding/gifs/fuzzy-finding-with-keys.gif)
+![Fuzzy-finding verses across the whole Bible](../../.tapes/fuzzy-finding/gifs/fuzzy-finding-with-keys_small.gif)
 
 Matching is loose by default, so typos and partial words still find what you meant. Press `ctrl+s` again inside
 the finder to see the query syntax:

@@ -3,7 +3,7 @@
 `/` searches the pane you're in, Vim-style. In the books pane it finds book names. In the text pane it finds
 words in the current chapter. Matches are highlighted as you type, with a count in the footer.
 
-![Searching book names and chapter text with /](../../.tapes/searching/gifs/searching-with-keys.gif)
+![Searching book names and chapter text with /](../../.tapes/searching/gifs/searching-with-keys_small.gif)
 
 | Action | Keys |
 | --- | --- |

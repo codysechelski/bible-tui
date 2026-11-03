@@ -15,8 +15,10 @@ always re-records, `--skip-record` never does).
 VHS's recording of the tape's `Output ... .mp4` is moved to `videos/raw/<name>.mp4` and never modified.
 From it come `videos/<name>.mp4` (the recording plus any overlays the tape asks for) and
 `videos/<name>-with-keys.mp4` (the same plus the keystrokes; or `-o PATH`). Both videos are then exported to
-`gifs/<name>.gif` and `gifs/<name>-with-keys.gif` at 720p: readable text matters more than compression
-artifacts, so the GIFs trade colors and frame rate for pixels. Last, every image in `screenshots/` gets a
+two GIFs each: `gifs/<name>_large.gif` at 720p with 128 colors, for a blog or anywhere size doesn't matter,
+and `gifs/<name>_small.gif` at 960 px wide with 32 colors, for the docs (git ignores `*_large.gif`). Readable
+text matters more than compression artifacts, so the GIFs trade colors and frame rate for pixels.
+`--gifs-only` re-exports just the GIFs from the videos already there. Last, every image in `screenshots/` gets a
 thumbnail beside it named `<name>-thumbnail.<ext>`. Running again with unchanged inputs does nothing;
 `--force` re-renders.
 
@@ -634,11 +636,12 @@ def compose(video: Path, output: Path, layers: list[tuple[list, object]], size: 
         partial.replace(output)
 
 
-def export_gif(source: Path, gif: Path, fps: float, colors: int, height: int | None, force: bool) -> None:
-    """Export `source` as a looping GIF, spending the size budget on pixels over colors."""
+def export_gif(source: Path, gif: Path, fps: float, colors: int, scale: str | None, force: bool) -> None:
+    """Export `source` as a looping GIF, spending the size budget on pixels over colors. `scale` is an ffmpeg
+    `width:height` (one side -2 to keep the aspect ratio), or None to keep the video's size."""
     fingerprint = hashlib.sha256(json.dumps({
         "version": VERSION, "source": [source.stat().st_size, source.stat().st_mtime_ns],
-        "fps": fps, "colors": colors, "height": height,
+        "fps": fps, "colors": colors, "scale": scale,
     }, sort_keys=True).encode()).hexdigest()
     stamp = gif.with_name(f".{gif.name}.stamp")
     if not force and gif.is_file() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
@@ -646,9 +649,9 @@ def export_gif(source: Path, gif: Path, fps: float, colors: int, height: int | N
         return
     # One palette for the whole clip (terminal recordings use few colors). Ordered dithering keeps frames
     # stable, and diff_mode=rectangle only re-encodes the part of each frame that changed.
-    scale = f",scale=-2:{height}:flags=lanczos" if height else ""
+    scaling = f",scale={scale}:flags=lanczos" if scale else ""
     filters = (
-        f"fps={fps}{scale},split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
+        f"fps={fps}{scaling},split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
         "[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"
     )
     partial = gif.with_name(f".{gif.stem}.partial.gif")
@@ -663,6 +666,17 @@ def export_gif(source: Path, gif: Path, fps: float, colors: int, height: int | N
     partial.replace(gif)
     stamp.write_text(fingerprint + "\n")
     print(f"wrote {gif} ({gif.stat().st_size / 1_000_000:.1f} MB)")
+
+
+def export_gifs(folder: Path, sources: tuple[Path, ...], width: int, height: int, args: argparse.Namespace) -> None:
+    """Export each video as `<name>_large.gif` and `<name>_small.gif`."""
+    large = f"-2:{min(args.gif_height, height)}" if args.gif_height else None
+    small = f"{min(args.gif_small_width, width)}:-2" if args.gif_small_width else None
+    (folder / "gifs").mkdir(exist_ok=True)
+    for source in sources:
+        for suffix, colors, scale in (("_large", args.gif_colors, large), ("_small", args.gif_small_colors, small)):
+            gif = folder / "gifs" / f"{source.stem}{suffix}.gif"
+            export_gif(source, gif, args.gif_fps, colors, scale, args.force)
 
 
 THUMBNAIL_SUFFIX = "-thumbnail"
@@ -723,9 +737,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--thumbnail-width", type=int, default=640,
                         help="screenshot thumbnail width in px; 0 skips thumbnails (default 640)")
     parser.add_argument("--gif-fps", type=float, default=12, help="GIF frame rate (default 12)")
-    parser.add_argument("--gif-colors", type=int, default=128, help="GIF palette size, 2-256 (default 128)")
+    parser.add_argument("--gif-colors", type=int, default=128,
+                        help="large GIF palette size, 2-256 (default 128)")
     parser.add_argument("--gif-height", type=int, default=720,
-                        help="GIF height in px, never above the video's; 0 keeps full size (default 720)")
+                        help="large GIF height in px, never above the video's; 0 keeps full size (default 720)")
+    parser.add_argument("--gif-small-colors", type=int, default=32,
+                        help="small GIF palette size, 2-256 (default 32)")
+    parser.add_argument("--gif-small-width", type=int, default=960,
+                        help="small GIF width in px, never above the video's; 0 keeps full size (default 960)")
+    parser.add_argument("--gifs-only", action="store_true",
+                        help="only re-export the GIFs from the existing videos (no vhs, no overlays)")
     parser.add_argument("--skip-record", action="store_true",
                         help="don't run vhs; post-process the existing video")
     parser.add_argument("--force", action="store_true",
@@ -742,6 +763,8 @@ def main(argv: list[str] | None = None) -> int:
         args.force = True
     elif not args.tapes:
         parser.error("give at least one tape or folder, or --all")
+    if args.gifs_only and args.no_gif:
+        parser.error("--gifs-only and --no-gif can't be used together")
     if args.output and len(args.tapes) > 1:
         parser.error("-o/--output only works with a single tape")
 
@@ -777,6 +800,13 @@ def produce(tape_arg: Path, args: argparse.Namespace) -> None:
         print(f"warning: {warning}", file=sys.stderr)
     video = video_path(tape, timeline.outputs)
     raw = raw_path(video)
+    output = (args.output or folder / "videos" / f"{video.stem}-with-keys.mp4").resolve()
+    if args.gifs_only:
+        for source in (video, output):
+            if not source.is_file():
+                sys.exit(f"produce-video: {source} doesn't exist; run without --gifs-only")
+        export_gifs(folder, (video, output), *probe(video)[:2], args)
+        return
     if not args.dry_run:
         for name in OUTPUT_FOLDERS:
             (folder / name).mkdir(exist_ok=True)
@@ -787,7 +817,6 @@ def produce(tape_arg: Path, args: argparse.Namespace) -> None:
             record(tape, video, tape_hash, args.force)
     elif not raw.is_file():
         sys.exit(f"produce-video: {raw} doesn't exist yet; --dry-run needs a recorded video")
-    output = (args.output or folder / "videos" / f"{video.stem}-with-keys.mp4").resolve()
     if output in (video, raw):
         sys.exit("produce-video: -o must differ from the tape's videos")
     width, height, duration = probe(raw)
@@ -859,10 +888,7 @@ def produce(tape_arg: Path, args: argparse.Namespace) -> None:
         print(f"wrote {target}")
 
     if not args.no_gif:
-        gif_height = min(args.gif_height, height) if args.gif_height else None
-        for source in (video, output):
-            gif = folder / "gifs" / f"{source.stem}.gif"
-            export_gif(source, gif, args.gif_fps, args.gif_colors, gif_height, args.force)
+        export_gifs(folder, (video, output), width, height, args)
 
     if args.thumbnail_width:
         make_thumbnails(folder / "screenshots", args.thumbnail_width, args.force)

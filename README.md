@@ -15,7 +15,7 @@
 
 A fast, dependency-free terminal Bible reader with Vim-style keys.
 
-![A tour of bible-tui: moving around, going to a verse, fuzzy-finding, marking, highlighting, and comparing two versions](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/overview/gifs/overview.gif)
+![A tour of bible-tui: moving around, going to a verse, fuzzy-finding, marking, highlighting, and comparing two versions](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/overview/gifs/overview_small.gif)
 
 - **[Read and navigate](https://github.com/codysechelski/bible-tui/blob/main/docs/features/navigation.md)** with arrows or Vim keys,
   [jump to `John 3:16`](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) with autocomplete, and use a Vim-style

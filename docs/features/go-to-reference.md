@@ -3,7 +3,7 @@
 Type a reference like `John 3:16`, `John 3`, or just `John` and jump straight there. Book names autocomplete as
 you type, then chapters, then verses.
 
-![Going to a verse with the go-to box and the command line](../../.tapes/go-to-reference/gifs/go-to-reference-with-keys.gif)
+![Going to a verse with the go-to box and the command line](../../.tapes/go-to-reference/gifs/go-to-reference-with-keys_small.gif)
 
 There are two ways in:
 

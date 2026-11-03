@@ -2,7 +2,7 @@
 
 You don't have to memorize anything: `ctrl+p` (or `?`) lists every action and its keys.
 
-![Opening the commands list with ? and scrolling through it](../../.tapes/commands/gifs/commands-with-keys.gif)
+![Opening the commands list with ? and scrolling through it](../../.tapes/commands/gifs/commands-with-keys_small.gif)
 
 ![The commands list](../../.tapes/commands/screenshots/commands.png)
 

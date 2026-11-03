@@ -3,7 +3,7 @@
 bible-tui is a terminal Bible reader that stays out of your way. Everything works with the arrow keys, Enter,
 and Esc, and Vim users get the keys they already know. Each page below has a short animation of the feature.
 
-![A tour of bible-tui: moving around, going to a verse, fuzzy-finding, marking, highlighting, and comparing two versions](../../.tapes/overview/gifs/overview-with-keys.gif)
+![A tour of bible-tui: moving around, going to a verse, fuzzy-finding, marking, highlighting, and comparing two versions](../../.tapes/overview/gifs/overview-with-keys_small.gif)
 
 ## Reading
 

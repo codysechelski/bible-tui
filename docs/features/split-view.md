@@ -4,7 +4,7 @@ Split the text pane to read two versions at once, side by side or one above the 
 same book and chapter, and each verse starts on the same line in both, so they're easy to compare. A verse that
 one version leaves out is shaded.
 
-![Opening a split, picking a version, and moving between panes](../../.tapes/splits/gifs/splits-with-keys.gif)
+![Opening a split, picking a version, and moving between panes](../../.tapes/splits/gifs/splits-with-keys_small.gif)
 
 | | |
 | --- | --- |

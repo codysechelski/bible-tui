@@ -3,7 +3,7 @@
 Press `m` to mark a verse, like a bookmark. A sign appears next to the verse number. To mark several verses at
 once, select them first with `V`. Press `m` again to unmark.
 
-![Marking verses and jumping to them from the marks list](../../.tapes/marks/gifs/marks-with-keys.gif)
+![Marking verses and jumping to them from the marks list](../../.tapes/marks/gifs/marks-with-keys_small.gif)
 
 ![A marked verse with the mark sign in the gutter](../../.tapes/marks/screenshots/showing-marked-verse.png)
 

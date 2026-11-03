@@ -3,7 +3,7 @@
 Press `c` to highlight the current verse, or every verse in a selection. Pick one of six colors with `1`–`6`
 (or arrows and Enter), or clear the highlight with `0`.
 
-![Highlighting verses in different colors](../../.tapes/highlight/gifs/feature-highlight-with-keys.gif)
+![Highlighting verses in different colors](../../.tapes/highlight/gifs/feature-highlight-with-keys_small.gif)
 
 | | |
 | --- | --- |

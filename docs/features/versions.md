@@ -5,7 +5,7 @@ in the version picker. The public-domain KJV and ASV are included.
 
 Press `t` to switch. You stay on the same verse, and your marks and highlights carry over.
 
-![Switching versions from the version picker and the command line](../../.tapes/version-switching/gifs/version-switching-with-keys.gif)
+![Switching versions from the version picker and the command line](../../.tapes/version-switching/gifs/version-switching-with-keys_small.gif)
 
 | | |
 | --- | --- |
