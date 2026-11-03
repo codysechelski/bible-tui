@@ -82,7 +82,7 @@ bible-tui --paths                 # show the config, state, and Bible folders in
 | All commands and keys | `ctrl+p` or `?` |
 | Quit | `q` |
 
-Every action also works without Vim keys. The full list is in [docs/keybindings.md](https://github.com/codysechelski/bible-tui/blob/main/docs/keybindings.md).
+Every action also works without Vim keys. The full list is in [docs/keybindings.md](https://github.com/codysechelski/bible-tui/blob/main/docs/keybindings.md).\n\nCurious how far the Vim inspiration goes? Read the [Vim-inspired navigation philosophy](docs/vim-inspired-navigation.md).
 
 ## Adding versions
 
