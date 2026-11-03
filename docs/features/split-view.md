@@ -4,11 +4,18 @@ Split the text pane to read two versions at once, side by side or one above the 
 same book and chapter, and each verse starts on the same line in both, so they're easy to compare. A verse that
 one version leaves out is shaded.
 
-![Opening a split, picking a version, and moving between panes](../screenshots/gifs/bible-tui-using-splits.gif)
+![Opening a split, picking a version, and moving between panes](../../.tapes/splits/gifs/splits-with-keys_small.gif)
+
+| | |
+| --- | --- |
+| ![Two versions side by side](../../.tapes/splits/screenshots/showing-vertical-split.png) | ![The KJV above the Bíblia Livre](../../.tapes/splits/screenshots/showing-horizontal-split.png) |
+| Side by side (`ctrl+w v`) | Top and bottom (`:split`) |
 
 <sub>The Portuguese text is the Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco
 Teles, from [eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not bundled with bible-tui.</sub>
+
+![Picking the version for a new pane](../../.tapes/splits/screenshots/showing-new-pane-version-picker.png)
 
 | Action | Keys | Command |
 | --- | --- | --- |

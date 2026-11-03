@@ -3,7 +3,7 @@
 Type a reference like `John 3:16`, `John 3`, or just `John` and jump straight there. Book names autocomplete as
 you type, then chapters, then verses.
 
-![Going to a verse with the go-to box and the command line](../screenshots/gifs/bible-tui-go-to-verse-using-modal-or-command-line.gif)
+![Going to a verse with the go-to box and the command line](../../.tapes/go-to-reference/gifs/go-to-reference-with-keys_small.gif)
 
 There are two ways in:
 
@@ -13,3 +13,8 @@ There are two ways in:
 
 In both, Tab accepts the highlighted suggestion, `ctrl+n` or ↑ / ↓ move through the list, Enter goes, and Esc
 cancels.
+
+| | |
+| --- | --- |
+| ![The Go To Reference box](../../.tapes/go-to-reference/screenshots/showing-go-to-reference-modal.png) | ![A reference typed on the command line](../../.tapes/go-to-reference/screenshots/showing-go-to-reference-command.png) |
+| The `ctrl+g` box | The `:` command line |

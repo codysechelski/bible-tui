@@ -1,0 +1,5 @@
+# Footnote for any tape that shows the Bíblia Livre: `#@ footnote bible-livre`, then `#@ footnote off`
+# when it leaves the screen. One paragraph per line. The second line is the credit its CC BY 4.0 Brasil
+# license asks for, as worded on its copyright page (porbr2018_usfm.zip, copr.htm).
+Not bundled with bible-tui. To install it, see “Adding Bibles” in the docs.
+Bíblia Livre (BLIVRE), Copyright © Diego Santos, Mario Sérgio, e Marco Teles, sites.google.com/site/biblialivre/ - fevereiro de 2018. Licença Creative Commons Atribuição 4.0 Brasil (creativecommons.org/licenses/by/4.0/br/).

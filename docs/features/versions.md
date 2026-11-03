@@ -5,16 +5,19 @@ in the version picker. The public-domain KJV and ASV are included.
 
 Press `t` to switch. You stay on the same verse, and your marks and highlights carry over.
 
-![Switching versions with the version picker](../screenshots/gifs/bible-tui-version-picker.gif)
+![Switching versions from the version picker and the command line](../../.tapes/version-switching/gifs/version-switching-with-keys_small.gif)
 
-![The version picker listing three versions](../screenshots/images/supports-multiple-versions.png)
+| | |
+| --- | --- |
+| ![The version picker listing three versions](../../.tapes/version-switching/screenshots/showing-version-picker-modal.png) | ![Picking a version with :set version](../../.tapes/version-switching/screenshots/showing-version-picker-command-line.png) |
+| The `t` picker | `:set version=` on the command line |
 
 ## Any language
 
 Book names and text come from the database, so a Bible in another language works just like the bundled ones.
-This is the Portuguese Bíblia Livre:
+This is the Portuguese Bíblia Livre, below the KJV:
 
-![Reading Romans 10 in Portuguese](../screenshots/images/support-for-non-english-bibles.png)
+![Romans 10 in the KJV above the Portuguese Bíblia Livre](../../.tapes/splits/screenshots/showing-horizontal-split.png)
 
 <sub>Screenshot text: Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco Teles, from
 [eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under

@@ -1,4 +1,9 @@
-# bible-tui
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/logo/bible-tui-logo-dark.png">
+    <img alt="bible-tui" src="https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/logo/bible-tui-logo-light.png" width="400">
+  </picture>
+</h1>
 
 <p align="center">
   <a href="https://github.com/codysechelski/bible-tui/releases"><img alt="Release" src="https://img.shields.io/github/v/release/codysechelski/bible-tui?sort=semver"></a>
@@ -10,7 +15,7 @@
 
 A fast, dependency-free terminal Bible reader with Vim-style keys.
 
-![bible-tui showing Genesis 1 with the books and chapters panes](https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/screenshots/images/main.png)
+![A tour of bible-tui: moving around, going to a verse, fuzzy-finding, marking, highlighting, and comparing two versions](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/overview/gifs/overview_small.gif)
 
 - **[Read and navigate](https://github.com/codysechelski/bible-tui/blob/main/docs/features/navigation.md)** with arrows or Vim keys,
   [jump to `John 3:16`](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) with autocomplete, and use a Vim-style
@@ -25,10 +30,10 @@ A fast, dependency-free terminal Bible reader with Vim-style keys.
 
 | | |
 | --- | --- |
-| ![Highlight color picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/screenshots/images/multi-color-highlighting.png) | ![List of highlights](https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/screenshots/images/showing-jump-list-of-highlights.png) |
-| [Highlight verses](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) in six colors | [Jump back](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) to any highlight or mark |
-| ![Version picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/screenshots/images/supports-multiple-versions.png) | ![A Portuguese Bible](https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/screenshots/images/support-for-non-english-bibles.png) |
-| [Switch versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md) and keep your place | [Any language](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md#any-language) works |
+| [![Highlight color picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/highlight/screenshots/showing-highlight-options-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) | [![List of highlights](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/highlight/screenshots/showing-highlights-list-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) |
+| [Highlight verses](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) in six colors | [Jump back](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) to any highlight |
+| [![Version picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/version-switching/screenshots/showing-version-picker-modal-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md) | [![The KJV above a Portuguese Bible](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/splits/screenshots/showing-horizontal-split-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md) |
+| [Switch versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md) and keep your place | [Compare two versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md), in any language |
 
 <sub>The Portuguese screenshot shows the Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco Teles, from
 [eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under

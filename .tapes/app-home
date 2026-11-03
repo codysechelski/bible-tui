@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Swaps the real bible-tui app home for a clean one while a tape records, and puts it back afterwards.
+#
+#   app-home setup     back up the app home (once), then reset it: defaults/config.json, a state.json that
+#                      opens ASV and skips the update check, and no marks or highlights
+#   app-home restore   put the backed-up app home back (does nothing when there's no backup)
+#
+# setup.tape and teardown.tape run this; produce-video also runs `restore` after every vhs run, so a tape
+# that fails part way still gets the real files back. If a backup already exists (an earlier run never
+# restored), setup keeps it rather than backing up the demo files over it.
+set -euo pipefail
+
+here="$(cd "$(dirname "$0")" && pwd)"
+
+# The app home, found the way bible-tui finds it.
+if [[ -n "${BIBLE_TUI_HOME:-}" ]]; then
+  app="$BIBLE_TUI_HOME"
+elif [[ -d "$HOME/.bible-tui" ]]; then
+  app="$HOME/.bible-tui"
+else
+  app="${XDG_CONFIG_HOME:-$HOME/.config}/bible-tui"
+fi
+app="${app%/}"
+backup="$app.tapes-backup"
+absent="$backup/.no-app-home"  # marks a backup of an app home that didn't exist
+
+case "${1:-}" in
+  setup)
+    if [[ -e "$backup" ]]; then
+      echo "app-home: keeping the existing backup $backup (an earlier run didn't restore)" >&2
+    elif [[ -e "$app" ]]; then
+      cp -a "$app" "$backup"  # -a keeps config.json a symlink into the dotfiles
+    else
+      mkdir -p "$backup" && touch "$absent"
+    fi
+    rm -rf "$app"
+    mkdir -p "$app"
+    cp "$here/defaults/config.json" "$app/config.json"
+    # last_update_check: an update notice must not pop up mid-video.
+    printf '{\n  "last_version": "ASV",\n  "last_update_check": %s\n}\n' "$(date +%s)" > "$app/state.json"
+    ;;
+  restore)
+    [[ -e "$backup" ]] || exit 0
+    rm -rf "$app"
+    if [[ -e "$absent" ]]; then
+      rm -rf "$backup"
+    else
+      mv "$backup" "$app"
+    fi
+    echo "app-home: restored $app" >&2
+    ;;
+  *)
+    echo "usage: app-home setup|restore" >&2
+    exit 2
+    ;;
+esac
