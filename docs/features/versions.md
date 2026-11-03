@@ -26,7 +26,10 @@ This is the Portuguese Bíblia Livre, below the KJV:
 ## Adding more
 
 Copy a database into `~/.config/bible-tui/bibles/` and it appears in the picker. To make one from a published
-Bible (USFM, USX, OSIS, and others), see [adding-bibles.md](../adding-bibles.md).
+Bible (USFM, USX, OSIS, and others), or to build your own database, see [adding-bibles.md](../adding-bibles.md).
+
+Only public-domain and openly licensed versions come with bible-tui. Copyrighted translations such as the NIV
+can't be bundled, but you can add any version you have the rights to use.
 
 Versions don't all have to cover the same verses. If you switch to one that leaves out the verse you're on,
 bible-tui moves to the nearest verse before it.

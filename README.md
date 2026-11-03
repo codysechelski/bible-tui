@@ -25,8 +25,8 @@ A fast, dependency-free terminal Bible reader with Vim-style keys.
 - **[Compare two versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md)** side by side, with verses lined up.
 - **[Mark](https://github.com/codysechelski/bible-tui/blob/main/docs/features/marks.md) and [highlight](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md)** verses in six colors. They're
   saved and show in every version.
-- **[Bring any version](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md)**, in any language: each one is a SQLite file. The
-  public-domain KJV and ASV are included.
+- **[Bring any version you have the rights to](https://github.com/codysechelski/bible-tui/blob/main/docs/features/versions.md)**, in any language: each one is a SQLite file. The
+  public-domain KJV and ASV are included (see [what about the NIV or ESV?](https://github.com/codysechelski/bible-tui#what-about-the-niv-or-esv)).
 
 | | |
 | --- | --- |
@@ -87,10 +87,22 @@ Every action also works without Vim keys. The full list is in [docs/keybindings.
 ## Adding versions
 
 Each version is one SQLite file. Copy a database into `~/.config/bible-tui/bibles/` and it appears in the
-version picker. To make one from a published Bible (USFM, USX, OSIS, and others), use
-[bible-tui-bible-converter](https://github.com/codysechelski/bible-tui-bible-converter). See
-[docs/adding-bibles.md](https://github.com/codysechelski/bible-tui/blob/main/docs/adding-bibles.md) for the steps, and
-[docs/bible-databases.md](https://github.com/codysechelski/bible-tui/blob/main/docs/bible-databases.md) for the schema.
+version picker.
+
+## What about the NIV or ESV?
+
+bible-tui will only ever ship Bibles that are in the public domain or under an open licence that lets them be
+shared. Most modern translations, including the NIV and ESV, are under copyright, so they can't be distributed
+through this repo, and pull requests that add them can't be accepted.
+
+You can still read any version you have the rights to use:
+
+- **Convert a published Bible.** [bible-tui-bible-converter](https://github.com/codysechelski/bible-tui-bible-converter),
+  a companion tool from the same author, turns USFM, USX, OSIS, and other formats into bible-tui databases.
+  [docs/adding-bibles.md](https://github.com/codysechelski/bible-tui/blob/main/docs/adding-bibles.md) walks through it.
+- **Make your own database.** bible-tui doesn't care where a database came from. It only has to match the
+  [database schema](https://github.com/codysechelski/bible-tui/blob/main/docs/bible-databases.md#schema). Most coding agents can take Bible text from whatever
+  source you have it in and write a SQLite file with this schema.
 
 ## Configuration
 

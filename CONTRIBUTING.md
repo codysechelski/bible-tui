@@ -53,6 +53,9 @@ cd bible-tui
 - **Bibles are read-only.** The app never writes to a Bible database. Don't edit the bundled databases in
   `bible_tui/bibles/` by hand; they come from the
   [converter project](docs/adding-bibles.md).
+- **Only public-domain or openly licensed Bibles are bundled.** Pull requests that add a copyrighted
+  translation can't be accepted. To read one you have the rights to, add it as your own database
+  ([adding-bibles.md](docs/adding-bibles.md)).
 - **Keep user data safe.** If a file like `marks.json` fails to load, refuse to save rather than overwrite it.
 - **Every action needs a non-Vim key.** Arrows, Tab, Page Up/Down, Home/End, Enter, and Esc must reach every
   action. Vim-style keys are welcome as extra aliases, never as the only way.
