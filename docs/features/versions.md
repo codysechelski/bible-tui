@@ -17,7 +17,7 @@ Press `t` to switch. You stay on the same verse, and your marks and highlights c
 Book names and text come from the database, so a Bible in another language works just like the bundled ones.
 This is the Portuguese Bíblia Livre, below the KJV:
 
-![Romans 10 in the KJV above the Portuguese Bíblia Livre](../../.tapes/splits/screenshots/showing-vertical-split.png)
+![Romans 10 in the KJV above the Portuguese Bíblia Livre](../../.tapes/splits/screenshots/showing-horizontal-split.png)
 
 <sub>Screenshot text: Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco Teles, from
 [eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under

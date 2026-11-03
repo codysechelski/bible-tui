@@ -38,7 +38,7 @@ Type "v"
 Screenshot screenshots/showing-new-pane-version-picker.png
 Sleep 1s
 Enter
-Screenshot screenshots/showing-horizontal-split.png
+Screenshot screenshots/showing-vertical-split.png
 Sleep 500ms
 Type@330ms "jjjjkkk"
 Sleep 550ms
@@ -61,7 +61,7 @@ Enter
 # The new pane is the Bíblia Livre, until :only closes it.
 #@ footnote bible-livre
 Sleep 400ms
-Screenshot screenshots/showing-vertical-split.png
+Screenshot screenshots/showing-horizontal-split.png
 Type@250ms "kkkjjjj"
 Sleep 450ms
 Ctrl+W

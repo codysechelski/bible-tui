@@ -6,14 +6,14 @@ one version leaves out is shaded.
 
 ![Opening a split, picking a version, and moving between panes](../../.tapes/splits/gifs/splits-with-keys.gif)
 
+| | |
+| --- | --- |
+| ![Two versions side by side](../../.tapes/splits/screenshots/showing-vertical-split.png) | ![The KJV above the Bíblia Livre](../../.tapes/splits/screenshots/showing-horizontal-split.png) |
+| Side by side (`ctrl+w v`) | Top and bottom (`:split`) |
+
 <sub>The Portuguese text is the Bíblia Livre (BLIVRE), copyright © 2018 Diego Santos, Mario Sérgio, and Marco
 Teles, from [eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not bundled with bible-tui.</sub>
-
-| | |
-| --- | --- |
-| ![Two versions side by side](../../.tapes/splits/screenshots/showing-horizontal-split.png) | ![The KJV above the Bíblia Livre](../../.tapes/splits/screenshots/showing-vertical-split.png) |
-| Side by side (`ctrl+w v`) | Top and bottom (`:split`) |
 
 ![Picking the version for a new pane](../../.tapes/splits/screenshots/showing-new-pane-version-picker.png)
 
