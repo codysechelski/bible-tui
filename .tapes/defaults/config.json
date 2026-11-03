@@ -1,0 +1,10 @@
+{
+  "bibles_dirs": [
+    "~/Developer/Projects/bibles/bibles"
+  ],
+  "book_order": "bible",
+  "nerd_font": true,
+  "remember_split": false,
+  "remember_position": false,
+  "check_for_updates": true
+}

@@ -1,0 +1,872 @@
+#!/usr/bin/env python3
+"""Record a VHS tape and burn a keycaster-style overlay of its keystrokes into the video, in one step.
+
+Usage: produce-video [options] TAPE...   (.tape files, or folders containing exactly one each)
+
+Several tapes are processed one after another. A tape that fails is reported and the rest still run.
+`-a`/`--all` processes every tape folder next to this script and implies `--force`, for re-recording
+everything after the app's look changes.
+
+Each tape lives in its own folder. Before recording, `screenshots/`, `videos/` and `gifs/` are created in that
+folder; `vhs` runs inside it, so the tape's relative `Output` and `Screenshot` paths land there.
+The tape is only re-recorded when it changed since the last recording or its .mp4 is missing (`--force`
+always re-records, `--skip-record` never does).
+
+VHS's recording of the tape's `Output ... .mp4` is moved to `videos/raw/<name>.mp4` and never modified.
+From it come `videos/<name>.mp4` (the recording plus any overlays the tape asks for) and
+`videos/<name>-with-keys.mp4` (the same plus the keystrokes; or `-o PATH`). Both videos are then exported to
+`gifs/<name>.gif` and `gifs/<name>-with-keys.gif` at 720p: readable text matters more than compression
+artifacts, so the GIFs trade colors and frame rate for pixels. Last, every image in `screenshots/` gets a
+thumbnail beside it named `<name>-thumbnail.<ext>`. Running again with unchanged inputs does nothing;
+`--force` re-renders.
+
+Overlays are asked for with directive comments, which VHS ignores:
+
+    #@ footnote bible-livre          show overlays/bible-livre.txt (one paragraph per line) from here on
+    #@ footnote "Line one" "Line two"  or give the text inline
+    #@ footnote off                  hide it again (it also ends when replaced, or when the video ends)
+
+A footnote is small text on a dark scrim, centered near the top. Each kind of overlay
+is one entry in OVERLAY_KINDS, so others (a title and subtitle drawn as a lower third, say) can be added
+beside it.
+
+Timing is simulated from the tape the same way VHS runs it: `Type` and key commands sleep for the typing
+speed after every key press, `Sleep` waits, and anything between `Hide` and `Show` is not in the video.
+Keys pressed while hidden are not shown. `Wait` and `Paste` take an unknown time, so the script warns;
+use `--offset` to shift the overlays if they drift.
+
+Needs vhs and ffmpeg/ffprobe on PATH and Pillow (`python3 -m pip install pillow`). Overlays are drawn with
+Pillow and composited with ffmpeg's overlay filter, so ffmpeg doesn't need drawtext or libass.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    sys.exit("produce-video: Pillow is required (python3 -m pip install pillow)")
+
+VERSION = "3"  # bump to invalidate up-to-date checks when the rendering changes
+DEFAULT_TYPING_SPEED = 0.05  # VHS default TypingSpeed (50ms)
+
+KEY_LABELS = {
+    "enter": "⏎",
+    "tab": "⇥",
+    "escape": "esc",
+    "backspace": "⌫",
+    "delete": "⌦",
+    "insert": "ins",
+    "space": "␣",
+    "up": "↑",
+    "down": "↓",
+    "left": "←",
+    "right": "→",
+    "pageup": "PgUp",
+    "pagedown": "PgDn",
+    "home": "home",
+    "end": "end",
+    "scrollup": "scroll ↑",
+    "scrolldown": "scroll ↓",
+}
+MODIFIER_LABELS = {"ctrl": "⌃", "alt": "⌥", "shift": "⇧"}
+
+FONT_CANDIDATES = [
+    ("/System/Library/Fonts/Menlo.ttc", 1),  # Menlo Bold
+    ("/System/Library/Fonts/Menlo.ttc", 0),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 0),
+    ("/usr/share/fonts/TTF/DejaVuSansMono-Bold.ttf", 0),
+]
+TEXT_FONT_CANDIDATES = [  # proportional, for footnotes
+    ("/System/Library/Fonts/HelveticaNeue.ttc", 0),
+    ("/System/Library/Fonts/Helvetica.ttc", 0),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
+    ("/usr/share/fonts/TTF/DejaVuSans.ttf", 0),
+    *FONT_CANDIDATES,
+]
+
+ROOT = Path(__file__).resolve().parent
+APP_HOME = ROOT / "app-home"  # backs up / restores the real app home
+OVERLAY_TEXTS = ROOT / "overlays"  # named overlay texts: `#@ footnote NAME` reads overlays/NAME.txt
+
+
+@dataclass
+class KeyEvent:
+    time: float  # seconds into the output video
+    label: str
+    text: bool  # typed text (merged into one keycap) rather than a special key
+
+
+@dataclass
+class Overlay:
+    kind: str  # a key of OVERLAY_KINDS
+    start: float  # seconds into the output video
+    end: float | None  # None: until the video ends
+    lines: list[str]
+
+
+@dataclass
+class Timeline:
+    events: list[KeyEvent]
+    overlays: list[Overlay]
+    duration: float  # predicted visible duration
+    outputs: list[str]  # Output paths
+    warnings: list[str]
+    files: list[Path]  # every tape read (overlay texts aren't: changing one re-renders, not re-records)
+
+
+# ---- Tape parsing / timing ------------------------------------------------------------------------
+
+
+def parse_duration(value: str) -> float:
+    match = re.fullmatch(r"(\d+(?:\.\d+)?|\.\d+)(ms|s|m)?", value.strip())
+    if not match:
+        raise ValueError(f"bad duration: {value!r}")
+    number, unit = float(match.group(1)), match.group(2)
+    return number / 1000 if unit == "ms" else number * 60 if unit == "m" else number
+
+
+def split_command(line: str) -> tuple[str, str | None, str]:
+    """Split `Name[@speed] rest` into (name, speed, rest)."""
+    match = re.match(r"(\S+?)(?:@(\S+))?(?:\s+(.*))?$", line)
+    return match.group(1), match.group(2), (match.group(3) or "").strip()
+
+
+def quoted_strings(rest: str) -> list[str]:
+    return [m.group(2) for m in re.finditer(r"([\"'`])(.*?)\1", rest)]
+
+
+def text_label(char: str) -> str:
+    return "␣" if char == " " else "⏎" if char == "\n" else "⇥" if char == "\t" else char
+
+
+def simulate(tape: Path) -> Timeline:
+    """Play the tape on a clock: when each key is pressed and each overlay shows, in output-video time.
+
+    `Source` is followed like VHS does: the path is relative to the tape's folder (where vhs runs), and
+    `Output` lines in a sourced tape are ignored.
+    """
+    events: list[KeyEvent] = []
+    overlays: list[Overlay] = []
+    files: list[Path] = []
+    outputs: list[str] = []
+    warnings: list[str] = []
+    typing_speed = DEFAULT_TYPING_SPEED
+    clock = 0.0  # visible time
+    hidden = False
+
+    def advance(seconds: float) -> None:
+        nonlocal clock
+        if not hidden:
+            clock += seconds
+
+    def press(label: str, text: bool, speed: float) -> None:
+        if not hidden:
+            events.append(KeyEvent(clock, label, text))
+        advance(speed)
+
+    def run(path: Path, sourced: bool) -> None:
+        if path in files:
+            warnings.append(f"{path.name}: already sourced; skipped")
+            return
+        files.append(path)
+        for number, raw in enumerate(path.read_text().splitlines(), 1):
+            line = raw.strip()
+            if line.startswith("#@"):
+                directive(f"{path.name} line {number}", line[2:].strip())
+            elif line and not line.startswith("#"):
+                command(path, number, line, sourced)
+
+    def directive(where: str, text: str) -> None:
+        """`#@ KIND off`, `#@ KIND NAME` (overlays/NAME.txt), or `#@ KIND "line" "line"...`."""
+        kind, _, rest = text.partition(" ")
+        kind, rest = kind.lower(), rest.strip()
+        if kind not in OVERLAY_KINDS:
+            warnings.append(f"{where}: unknown overlay `{kind}` ignored (known: {', '.join(OVERLAY_KINDS)})")
+            return
+        for overlay in overlays:  # one overlay of each kind at a time: a new one replaces the last
+            if overlay.kind == kind and overlay.end is None:
+                overlay.end = clock
+        if rest.lower() == "off":
+            return
+        if rest[:1] in {'"', "'"}:
+            try:
+                lines = shlex.split(rest)
+            except ValueError as error:
+                warnings.append(f"{where}: {error}; overlay ignored")
+                return
+        else:
+            source = OVERLAY_TEXTS / f"{rest}.txt"
+            if not source.is_file():
+                warnings.append(f"{where}: no overlay text {source}; overlay ignored")
+                return
+            lines = [line.strip() for line in source.read_text().splitlines()
+                     if line.strip() and not line.lstrip().startswith("#")]
+        if lines:
+            overlays.append(Overlay(kind, clock, None, lines))
+
+    def command(path: Path, number: int, line: str, sourced: bool) -> None:
+        nonlocal typing_speed, hidden
+        name, speed_raw, rest = split_command(line)
+        lower = name.lower()
+        speed = parse_duration(speed_raw) if speed_raw else typing_speed
+        where = f"{path.name} line {number}"
+
+        if lower == "output":
+            if sourced:
+                return
+            outputs.append(rest.strip("\"'`"))
+        elif lower == "set":
+            parts = rest.split(None, 1)
+            if parts and parts[0].lower() == "typingspeed" and len(parts) > 1:
+                typing_speed = parse_duration(parts[1].strip("\"'"))
+        elif lower == "type":
+            for string in quoted_strings(rest):
+                for char in string:
+                    press(text_label(char), True, speed)
+        elif lower == "sleep":
+            advance(parse_duration(rest))
+        elif lower == "hide":
+            hidden = True
+        elif lower == "show":
+            hidden = False
+        elif lower in KEY_LABELS:
+            count = int(rest) if rest.isdigit() else 1
+            for _ in range(count):
+                press(KEY_LABELS[lower], False, speed)
+        elif "+" in name and name.split("+")[0].lower() in MODIFIER_LABELS:
+            *modifiers, key = name.split("+")
+            label = "".join(MODIFIER_LABELS.get(m.lower(), m) for m in modifiers)
+            label += KEY_LABELS.get(key.lower(), key.upper() if len(key) == 1 else key)
+            # VHS doesn't sleep after modifier combos.
+            press(label, False, 0)
+        elif lower.startswith("wait") or lower == "paste":
+            warnings.append(f"{where}: `{name}` takes an unknown time; later keys may drift")
+        elif lower in {"require", "env", "screenshot", "copy"}:
+            pass
+        elif lower == "source":
+            source = (tape.parent / rest.strip("\"'`")).expanduser().resolve()
+            if source.is_file():
+                run(source, True)
+            else:
+                warnings.append(f"{where}: sourced tape not found: {source}")
+        else:
+            warnings.append(f"{where}: unrecognised command `{name}` ignored")
+
+    run(tape.resolve(), False)
+    return Timeline(events, overlays, clock, outputs, warnings, files)
+
+
+def tape_fingerprint(files: list[Path]) -> str:
+    """Hash of the commands in the tape and every tape it sources, so editing a shared settings tape
+    re-records. Comments (and so `#@` overlay directives) and blank lines are left out: changing them only
+    re-renders."""
+    digest = hashlib.sha256()
+    for path in files:
+        commands = [line.strip() for line in path.read_text().splitlines()
+                    if line.strip() and not line.strip().startswith("#")]
+        digest.update(str(path).encode() + b"\0" + "\n".join(commands).encode() + b"\0")
+    return digest.hexdigest()
+
+
+# ---- Overlay states -------------------------------------------------------------------------------
+
+
+def build_keycaps(events: list[KeyEvent], max_text: int) -> list[str]:
+    """Merge a burst of events into keycap labels: typed text joins, repeated keys become `↓ ×3`."""
+    caps: list[tuple[str, bool, int]] = []  # (label, text, repeat)
+    for event in events:
+        if caps and event.text and caps[-1][1]:
+            caps[-1] = (caps[-1][0] + event.label, True, 1)
+        elif caps and not event.text and not caps[-1][1] and caps[-1][0] == event.label:
+            caps[-1] = (event.label, False, caps[-1][2] + 1)
+        else:
+            caps.append((event.label, event.text, 1))
+    labels = []
+    for label, text, repeat in caps:
+        if text and len(label) > max_text:
+            label = "…" + label[-(max_text - 1):]
+        labels.append(f"{label} ×{repeat}" if repeat > 1 else label)
+    return labels
+
+
+def build_states(events: list[KeyEvent], linger: float, max_caps: int, max_text: int):
+    """Return [(start, end, keycap labels)] where the overlay shows keycaps; gaps show nothing."""
+    states = []
+    burst: list[KeyEvent] = []
+    for index, event in enumerate(events):
+        if burst and event.time - burst[-1].time > linger:
+            burst = []
+        burst.append(event)
+        end = event.time + linger
+        if index + 1 < len(events):
+            end = min(end, events[index + 1].time)
+        labels = build_keycaps(burst, max_text)[-max_caps:]
+        if end > event.time:
+            states.append((event.time, end, labels))
+    return states
+
+
+# ---- Rendering ------------------------------------------------------------------------------------
+
+
+def load_font(path: str | None, size: int, candidates=FONT_CANDIDATES):
+    if path:
+        return ImageFont.truetype(path, size)
+    for candidate, index in candidates:
+        if os.path.exists(candidate):
+            return ImageFont.truetype(candidate, size, index=index)
+    sys.exit("produce-video: no font found; pass --font PATH")
+
+
+class Renderer:
+    def __init__(self, font, video_height: int):
+        self.font = font
+        unit = video_height / 1080
+        self.pad_x = round(22 * unit)
+        self.pad_y = round(14 * unit)
+        self.gap = round(12 * unit)
+        self.radius = round(12 * unit)
+        self.border = max(1, round(2 * unit))
+        self.shadow = round(5 * unit)
+        ascent, descent = font.getmetrics()
+        self.text_height = ascent + descent
+        self.cap_height = self.text_height + 2 * self.pad_y
+
+    def cap_width(self, label: str) -> int:
+        return round(self.font.getlength(label)) + 2 * self.pad_x
+
+    def row_width(self, labels: list[str]) -> int:
+        return sum(self.cap_width(label) for label in labels) + self.gap * max(0, len(labels) - 1)
+
+    def render(self, labels: list[str], size: tuple[int, int], alpha: float = 1.0) -> Image.Image:
+        image = Image.new("RGBA", size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        x = size[0] - self.shadow
+        top = size[1] - self.shadow - self.cap_height
+
+        def a(value: int) -> int:
+            return round(value * alpha)
+
+        for index, label in enumerate(reversed(labels)):
+            width = self.cap_width(label)
+            x -= width
+            newest = index == 0
+            box = (x, top, x + width, top + self.cap_height)
+            shadow_box = (x + self.shadow // 2, top + self.shadow, x + width + self.shadow // 2,
+                          top + self.cap_height + self.shadow)
+            draw.rounded_rectangle(shadow_box, self.radius, fill=(0, 0, 0, a(110)))
+            fill = (40, 42, 54, a(235)) if newest else (30, 31, 40, a(215))
+            outline = (189, 147, 249, a(255)) if newest else (98, 114, 164, a(200))
+            draw.rounded_rectangle(box, self.radius, fill=fill, outline=outline, width=self.border)
+            color = (248, 248, 242, a(255)) if newest else (200, 200, 210, a(230))
+            draw.text((x + self.pad_x, top + self.pad_y), label, font=self.font, fill=color)
+            x -= self.gap
+        return image
+
+
+class FootnoteRenderer:
+    """Small wrapped text on a dark scrim, centered near the top (out of the keycaps' way). The first line
+    is brighter (the note); later lines are dimmer (credits and the like)."""
+
+    max_width = 0.5  # of the frame
+
+    def __init__(self, font, frame: tuple[int, int], margin: int):
+        self.font, self.frame, self.margin = font, frame, margin
+        unit = frame[1] / 1080
+        self.pad = round(16 * unit)
+        self.paragraph_gap = round(6 * unit)
+        self.radius = round(20 * unit)
+        ascent, descent = font.getmetrics()
+        self.line_height = round((ascent + descent) * 1.15)
+
+    def wrap(self, text: str, width: int) -> list[str]:
+        lines, line = [], ""
+        for word in text.split():
+            candidate = f"{line} {word}" if line else word
+            if line and self.font.getlength(candidate) > width:
+                lines.append(line)
+                line = word
+            else:
+                line = candidate
+        return lines + [line] if line else lines
+
+    def render(self, paragraphs: list[str], alpha: float) -> Image.Image:
+        width, height = self.frame
+        text_width = round(width * self.max_width) - 2 * self.pad
+        wrapped = [self.wrap(paragraph, text_width) for paragraph in paragraphs]
+        box_w = max(round(self.font.getlength(line)) for lines in wrapped for line in lines) + 2 * self.pad
+        box_h = (sum(len(lines) for lines in wrapped) * self.line_height
+                 + self.paragraph_gap * (len(wrapped) - 1) + 2 * self.pad)
+        left, top = (width - box_w) // 2, self.margin
+
+        image = Image.new("RGBA", self.frame, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((left, top, left + box_w, top + box_h), self.radius,
+                               fill=(22, 16, 32, round(250 * alpha)),  # almost black, a little purple
+                               outline=(64, 50, 92, round(255 * alpha)), width=max(1, round(self.frame[1] / 1080)))
+        y = top + self.pad
+        for index, lines in enumerate(wrapped):
+            color = (248, 248, 242) if index == 0 else (189, 189, 200)
+            for line in lines:
+                draw.text((left + self.pad, y), line, font=self.font, fill=(*color, round(255 * alpha)))
+                y += self.line_height
+            y += self.paragraph_gap
+        return image
+
+
+def footnote_renderer(frame: tuple[int, int], margin: int, args: argparse.Namespace) -> FootnoteRenderer:
+    size = args.footnote_size or max(10, round(frame[1] * 0.018))
+    return FootnoteRenderer(load_font(args.footnote_font, size, TEXT_FONT_CANDIDATES), frame, margin)
+
+
+# `#@ KIND ...` directives: each kind maps to a function returning its renderer, whose
+# `render(lines, alpha)` draws a full frame. Kinds are drawn in this order, under the keycaps.
+# A lower third (title and subtitle) would be another entry here.
+OVERLAY_KINDS = {
+    "footnote": footnote_renderer,
+}
+
+
+# ---- ffmpeg ---------------------------------------------------------------------------------------
+
+
+def probe(video: Path) -> tuple[int, int, float]:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=width,height:format=duration", "-of", "json", str(video)],
+        check=True, capture_output=True, text=True,
+    )
+    data = json.loads(result.stdout)
+    stream = data["streams"][0]
+    return int(stream["width"]), int(stream["height"]), float(data["format"]["duration"])
+
+
+def find_tape(path: Path) -> Path:
+    """Accept a .tape file or a folder holding exactly one."""
+    if path.is_dir():
+        tapes = sorted(path.glob("*.tape"))
+        if len(tapes) != 1:
+            found = ", ".join(t.name for t in tapes) or "none"
+            sys.exit(f"produce-video: expected one .tape file in {path}, found {found}")
+        return tapes[0].resolve()
+    if path.is_file():
+        return path.resolve()
+    sys.exit(f"produce-video: no such tape or folder: {path}")
+
+
+OUTPUT_FOLDERS = ("screenshots", "videos", "gifs")
+
+
+def video_path(tape: Path, outputs: list[str]) -> Path:
+    """The tape's .mp4 Output, resolved against the tape's folder (where vhs runs)."""
+    mp4s = [o for o in outputs if o.lower().endswith(".mp4")]
+    if not mp4s:
+        sys.exit(f"produce-video: {tape} has no `Output ... .mp4` line")
+    return (tape.parent / Path(mp4s[0]).expanduser()).resolve()
+
+
+def raw_path(video: Path) -> Path:
+    """Where the untouched VHS recording is kept: videos/raw/<name>.mp4 beside the tape's Output."""
+    return video.parent / "raw" / video.name
+
+
+def record(tape: Path, video: Path, fingerprint: str, force: bool) -> None:
+    """Run vhs unless the video was already recorded from this exact tape (and the tapes it sources), then
+    move the recording from the tape's Output path to raw_path(video)."""
+    raw = raw_path(video)
+    stamp = raw.with_name(f".{raw.name}.recorded")
+
+    def raw_state() -> str:
+        return f"{raw.stat().st_size}:{raw.stat().st_mtime_ns}"
+
+    if not force and raw.is_file() and stamp.is_file() and stamp.read_text().split() == [fingerprint,
+                                                                                       raw_state()]:
+        print(f"up to date: {raw} (recorded from this tape)")
+        return
+    if not shutil.which("vhs"):
+        sys.exit("produce-video: vhs not found on PATH")
+    print(f"$ vhs {shlex.quote(tape.name)}  (in {tape.parent})")
+    try:
+        subprocess.run(["vhs", tape.name], cwd=tape.parent, check=True)
+    except subprocess.CalledProcessError as error:
+        sys.exit(f"produce-video: vhs failed ({error.returncode})")
+    finally:
+        # teardown.tape normally restores the real app home; this covers a tape that failed or was stopped
+        # before reaching it. It does nothing when there's no backup.
+        subprocess.run([str(APP_HOME), "restore"])
+    if not video.is_file():
+        sys.exit(f"produce-video: vhs finished but {video} doesn't exist")
+    raw.parent.mkdir(exist_ok=True)
+    video.replace(raw)
+    stamp.write_text(f"{fingerprint} {raw_state()}\n")
+
+
+FADE_STEPS, FADE_TIME = 5, 0.25
+
+
+def key_pieces(states, duration: float) -> list[tuple[float, float, tuple]]:
+    """The keycap layer as [(start, end, (labels, alpha))], fading out only when the keycaps disappear,
+    not when the next key replaces them."""
+    pieces = []
+    for index, (start, end, labels) in enumerate(states):
+        followed = index + 1 < len(states) and states[index + 1][0] <= end + 1e-6
+        start, end = max(start, 0.0), min(end, duration)
+        if end <= start:
+            continue
+        if not followed and end - start > FADE_TIME:
+            hold = end - FADE_TIME
+            pieces.append((start, hold, (tuple(labels), 1.0)))
+            for step in range(FADE_STEPS):
+                alpha = round(1 - (step + 1) / (FADE_STEPS + 1), 3)
+                pieces.append((hold + step * FADE_TIME / FADE_STEPS, hold + (step + 1) * FADE_TIME / FADE_STEPS,
+                               (tuple(labels), alpha)))
+        else:
+            pieces.append((start, end, (tuple(labels), 1.0)))
+    return pieces
+
+
+def overlay_pieces(overlays: list[Overlay], duration: float) -> list[tuple[float, float, tuple]]:
+    """One overlay kind as [(start, end, (lines, alpha))], fading in, and out unless it lasts to the end."""
+    pieces = []
+    for overlay in overlays:
+        start = max(overlay.start, 0.0)
+        end = duration if overlay.end is None else min(overlay.end, duration)
+        if end <= start:
+            continue
+        lines = tuple(overlay.lines)
+        fade_in = end - start > 2 * FADE_TIME
+        fade_out = fade_in and end < duration - 1e-6
+        step = FADE_TIME / FADE_STEPS
+        if fade_in:
+            for i in range(FADE_STEPS):
+                pieces.append((start + i * step, start + (i + 1) * step,
+                               (lines, round((i + 1) / (FADE_STEPS + 1), 3))))
+            start += FADE_TIME
+        hold_end = end - FADE_TIME if fade_out else end
+        pieces.append((start, hold_end, (lines, 1.0)))
+        if fade_out:
+            for i in range(FADE_STEPS):
+                pieces.append((hold_end + i * step, hold_end + (i + 1) * step,
+                               (lines, round(1 - (i + 1) / (FADE_STEPS + 1), 3))))
+    return pieces
+
+
+def flatten(layers: list[list[tuple[float, float, tuple]]], duration: float) -> list[tuple[float, float, tuple]]:
+    """Merge the layers' pieces into [(start, end, (piece key or None per layer))] covering the video."""
+    cuts = sorted({0.0, duration, *(t for pieces in layers for piece in pieces for t in piece[:2]
+                                    if 0 < t < duration)})
+    spans: list[tuple[float, float, tuple]] = []
+    for start, end in zip(cuts, cuts[1:]):
+        if end - start < 1e-6:
+            continue
+        middle = (start + end) / 2
+        key = tuple(next((piece[2] for piece in pieces if piece[0] <= middle < piece[1]), None)
+                    for pieces in layers)
+        if spans and spans[-1][2] == key:
+            spans[-1] = (spans[-1][0], end, key)
+        else:
+            spans.append((start, end, key))
+    return spans
+
+
+def compose(video: Path, output: Path, layers: list[tuple[list, object]], size: tuple[int, int, float],
+            crf: int) -> None:
+    """Write `output`: `video` with every layer drawn over it. `layers` is [(pieces, draw)], bottom first,
+    where `draw(key)` returns a full-frame RGBA image for one piece. With nothing to draw, it's a copy."""
+    width, height, duration = size
+    partial = output.with_name(f".{output.stem}.partial{output.suffix}")
+    if not any(pieces for pieces, _ in layers):
+        shutil.copyfile(video, partial)
+        partial.replace(output)
+        return
+    spans = flatten([pieces for pieces, _ in layers], duration)
+
+    with tempfile.TemporaryDirectory(prefix="tape-overlay-") as tmp:
+        tmpdir = Path(tmp)
+        cache: dict[tuple, str] = {}
+
+        def frame(key: tuple) -> str:
+            if key not in cache:
+                image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                for piece, (_, draw) in zip(key, layers):
+                    if piece is not None:
+                        image = Image.alpha_composite(image, draw(piece))
+                name = f"f{len(cache):05d}.png"
+                image.save(tmpdir / name)
+                cache[key] = name
+            return cache[key]
+
+        concat = tmpdir / "overlay.ffconcat"
+        lines = ["ffconcat version 1.0"]
+        for start, end, key in spans:
+            lines += [f"file {frame(key)}", f"duration {end - start:.6f}"]
+        lines.append(f"file {frame(spans[-1][2])}")  # concat needs the last file repeated for its duration
+        concat.write_text("\n".join(lines) + "\n")
+
+        command = [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-stats", "-y",
+            "-i", str(video),
+            "-f", "concat", "-safe", "0", "-i", str(concat),
+            "-filter_complex",
+            "[1:v]format=rgba[top];[0:v][top]overlay=x=0:y=0:eof_action=repeat:format=auto,format=yuv420p[v]",
+            "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", str(crf), "-preset", "medium",
+            "-c:a", "copy", "-movflags", "+faststart", str(partial),
+        ]
+        print("$ " + " ".join(shlex.quote(part) for part in command))
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError as error:
+            partial.unlink(missing_ok=True)
+            sys.exit(f"produce-video: ffmpeg failed ({error.returncode})")
+        partial.replace(output)
+
+
+def export_gif(source: Path, gif: Path, fps: float, colors: int, height: int | None, force: bool) -> None:
+    """Export `source` as a looping GIF, spending the size budget on pixels over colors."""
+    fingerprint = hashlib.sha256(json.dumps({
+        "version": VERSION, "source": [source.stat().st_size, source.stat().st_mtime_ns],
+        "fps": fps, "colors": colors, "height": height,
+    }, sort_keys=True).encode()).hexdigest()
+    stamp = gif.with_name(f".{gif.name}.stamp")
+    if not force and gif.is_file() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
+        print(f"up to date: {gif}")
+        return
+    # One palette for the whole clip (terminal recordings use few colors). Ordered dithering keeps frames
+    # stable, and diff_mode=rectangle only re-encodes the part of each frame that changed.
+    scale = f",scale=-2:{height}:flags=lanczos" if height else ""
+    filters = (
+        f"fps={fps}{scale},split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
+        "[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"
+    )
+    partial = gif.with_name(f".{gif.stem}.partial.gif")
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-stats", "-y", "-i", str(source),
+               "-filter_complex", filters, "-loop", "0", str(partial)]
+    print("$ " + " ".join(shlex.quote(part) for part in command))
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as error:
+        partial.unlink(missing_ok=True)
+        sys.exit(f"produce-video: ffmpeg failed making {gif.name} ({error.returncode})")
+    partial.replace(gif)
+    stamp.write_text(fingerprint + "\n")
+    print(f"wrote {gif} ({gif.stat().st_size / 1_000_000:.1f} MB)")
+
+
+THUMBNAIL_SUFFIX = "-thumbnail"
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def make_thumbnails(folder: Path, width: int, force: bool) -> None:
+    """Write `<name>-thumbnail<ext>` next to each screenshot; never shrinks a thumbnail again."""
+    for image_path in sorted(folder.iterdir()):
+        if image_path.suffix.lower() not in IMAGE_EXTENSIONS or image_path.stem.endswith(THUMBNAIL_SUFFIX):
+            continue
+        thumb = image_path.with_name(f"{image_path.stem}{THUMBNAIL_SUFFIX}{image_path.suffix}")
+        with Image.open(image_path) as image:
+            target = min(width, image.width)
+            size = (target, max(1, round(image.height * target / image.width)))
+            if not force and thumb.is_file() and thumb.stat().st_mtime >= image_path.stat().st_mtime:
+                with Image.open(thumb) as existing:
+                    if existing.size == size:
+                        print(f"up to date: {thumb}")
+                        continue
+            resized = image.resize(size, Image.LANCZOS)
+            if thumb.suffix.lower() in {".jpg", ".jpeg"}:
+                resized.convert("RGB").save(thumb, quality=90)
+            else:
+                resized.save(thumb, optimize=True)
+        print(f"wrote {thumb}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="produce-video",
+        description="Record a VHS tape, then burn its overlays and a keycaster-style keystroke overlay"
+                    " into its .mp4 output and export GIFs.",
+    )
+    parser.add_argument("tapes", type=Path, nargs="*", metavar="TAPE",
+                        help=".tape files, or folders containing one; processed in order")
+    parser.add_argument("-a", "--all", action="store_true",
+                        help="re-record and re-render every tape folder next to this script (implies --force)")
+    parser.add_argument("-o", "--output", type=Path,
+                        help="output path (default: videos/<video>-with-keys.mp4); only with one tape")
+    parser.add_argument("--offset", type=float, default=0.0,
+                        help="seconds to shift the overlay (positive = later; default 0)")
+    parser.add_argument("--scale", default="auto",
+                        help="time scale for the tape timeline: 'auto' (fit to video length if it's within"
+                             " 15%%), 'none', or a number (default auto)")
+    parser.add_argument("--linger", type=float, default=1.5,
+                        help="seconds keycaps stay after the last key (default 1.5)")
+    parser.add_argument("--max-keys", type=int, default=6, help="most keycaps shown at once (default 6)")
+    parser.add_argument("--max-text", type=int, default=16, help="longest typed-text keycap (default 16)")
+    parser.add_argument("--font", help="font file (default: Menlo Bold or DejaVu Sans Mono Bold)")
+    parser.add_argument("--font-size", type=int, help="font size in px (default: 3.3%% of video height)")
+    parser.add_argument("--margin", type=int, help="margin from the bottom-right corner in px"
+                                                    " (default: 4%% of video height)")
+    parser.add_argument("--footnote-font", help="footnote font file (default: Helvetica Neue or DejaVu Sans)")
+    parser.add_argument("--footnote-size", type=int, help="footnote font size in px (default: 1.8%% of video height)")
+    parser.add_argument("--crf", type=int, default=18, help="x264 quality (default 18)")
+    parser.add_argument("--no-gif", action="store_true", help="skip the GIF exports")
+    parser.add_argument("--thumbnail-width", type=int, default=640,
+                        help="screenshot thumbnail width in px; 0 skips thumbnails (default 640)")
+    parser.add_argument("--gif-fps", type=float, default=12, help="GIF frame rate (default 12)")
+    parser.add_argument("--gif-colors", type=int, default=128, help="GIF palette size, 2-256 (default 128)")
+    parser.add_argument("--gif-height", type=int, default=720,
+                        help="GIF height in px, never above the video's; 0 keeps full size (default 720)")
+    parser.add_argument("--skip-record", action="store_true",
+                        help="don't run vhs; post-process the existing video")
+    parser.add_argument("--force", action="store_true",
+                        help="re-record and re-render even if the outputs are up to date")
+    parser.add_argument("--dry-run", action="store_true", help="print the keystroke timeline and exit")
+    args = parser.parse_args(argv)
+    if args.all:
+        if args.tapes:
+            parser.error("give tapes or --all, not both")
+        root = Path(__file__).resolve().parent
+        args.tapes = sorted(d for d in root.iterdir() if d.is_dir() and any(d.glob("*.tape")))
+        if not args.tapes:
+            sys.exit(f"produce-video: no tape folders in {root}")
+        args.force = True
+    elif not args.tapes:
+        parser.error("give at least one tape or folder, or --all")
+    if args.output and len(args.tapes) > 1:
+        parser.error("-o/--output only works with a single tape")
+
+    for tool in ("ffmpeg", "ffprobe"):
+        if not shutil.which(tool):
+            sys.exit(f"produce-video: {tool} not found on PATH")
+
+    failed = []
+    for index, tape_arg in enumerate(args.tapes):
+        if len(args.tapes) > 1:
+            print(f"{chr(10) if index else ''}==== {tape_arg} ({index + 1}/{len(args.tapes)})")
+        try:
+            produce(tape_arg, args)
+        except SystemExit as error:  # per-tape failures use sys.exit; keep going with the next tape
+            if error.code not in (None, 0):
+                print(error.code if isinstance(error.code, str) else f"produce-video: {tape_arg} failed",
+                      file=sys.stderr)
+                failed.append(str(tape_arg))
+    if failed:
+        print(f"produce-video: {len(failed)} of {len(args.tapes)} failed: {', '.join(failed)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def produce(tape_arg: Path, args: argparse.Namespace) -> None:
+    """Record one tape (if needed) and run post-production on it."""
+    tape = find_tape(tape_arg)
+    folder = tape.parent
+
+    timeline = simulate(tape)
+    tape_hash = tape_fingerprint(timeline.files)
+    for warning in timeline.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    video = video_path(tape, timeline.outputs)
+    raw = raw_path(video)
+    if not args.dry_run:
+        for name in OUTPUT_FOLDERS:
+            (folder / name).mkdir(exist_ok=True)
+        if args.skip_record:
+            if not raw.is_file():
+                sys.exit(f"produce-video: {raw} doesn't exist; run without --skip-record")
+        else:
+            record(tape, video, tape_hash, args.force)
+    elif not raw.is_file():
+        sys.exit(f"produce-video: {raw} doesn't exist yet; --dry-run needs a recorded video")
+    output = (args.output or folder / "videos" / f"{video.stem}-with-keys.mp4").resolve()
+    if output in (video, raw):
+        sys.exit("produce-video: -o must differ from the tape's videos")
+    width, height, duration = probe(raw)
+
+    predicted = timeline.duration
+    if args.scale == "none":
+        scale = 1.0
+    elif args.scale == "auto":
+        ratio = duration / predicted if predicted else 1.0
+        scale = ratio if abs(ratio - 1) <= 0.15 else 1.0
+    else:
+        scale = float(args.scale)
+    for event in timeline.events:
+        event.time = event.time * scale + args.offset
+    for overlay in timeline.overlays:
+        overlay.start = overlay.start * scale + args.offset
+        if overlay.end is not None:
+            overlay.end = overlay.end * scale + args.offset
+    print(f"tape: {predicted:.2f}s predicted, video: {duration:.2f}s, scale {scale:.4f},"
+          f" offset {args.offset:+.2f}s, {len(timeline.events)} keys, {len(timeline.overlays)} overlays")
+
+    font_size = args.font_size or max(12, round(height * 0.033))
+    margin = args.margin if args.margin is not None else round(height * 0.04)
+    states = build_states(timeline.events, args.linger, args.max_keys, args.max_text)
+    if args.dry_run:
+        for overlay in timeline.overlays:
+            end = "end" if overlay.end is None else f"{overlay.end:.2f}"
+            print(f"{overlay.start:8.2f} – {end:>8}  [{overlay.kind}] {' / '.join(overlay.lines)}")
+        for start, end, labels in states:
+            print(f"{start:8.2f} – {end:8.2f}  {'  '.join(labels)}")
+        return
+
+    # Overlay layers, bottom first, then the keycaps on top of them in the -with-keys video.
+    frame = (width, height)
+    layers = []
+    for kind, make_renderer in OVERLAY_KINDS.items():
+        overlays = [overlay for overlay in timeline.overlays if overlay.kind == kind]
+        if overlays:
+            renderer = make_renderer(frame, margin, args)
+            layers.append((overlay_pieces(overlays, duration),
+                           lambda key, renderer=renderer: renderer.render(list(key[0]), key[1])))
+    keys = Renderer(load_font(args.font, font_size), height)
+    canvas_width = min(width - margin, max([keys.row_width(s[2]) for s in states] or [1]) + keys.shadow)
+    canvas = (max(1, canvas_width), keys.cap_height + keys.shadow)
+
+    def draw_keys(key: tuple) -> Image.Image:
+        image = Image.new("RGBA", frame, (0, 0, 0, 0))
+        image.paste(keys.render(list(key[0]), canvas, key[1]), (width - margin - canvas[0], height - margin - canvas[1]))
+        return image
+
+    key_layer = (key_pieces(states, duration), draw_keys)
+
+    # Idempotence: skip an output made from these exact inputs and settings.
+    settings = {k: str(v) for k, v in vars(args).items()
+                if k not in {"tapes", "force", "dry_run", "skip_record", "output"}
+                and not k.startswith(("gif", "no_gif", "thumbnail"))}
+    overlays_used = [[o.kind, o.start, o.end, o.lines] for o in timeline.overlays]
+    for target, target_layers in ((video, layers), (output, [*layers, key_layer])):
+        fingerprint = hashlib.sha256(json.dumps({
+            "version": VERSION, "tape": tape_hash, "raw": [raw.stat().st_size, raw.stat().st_mtime_ns],
+            "settings": settings, "overlays": overlays_used, "keys": target == output,
+        }, sort_keys=True).encode()).hexdigest()
+        stamp = target.with_name(f".{target.name}.stamp")
+        if not args.force and target.is_file() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
+            print(f"up to date: {target}")
+            continue
+        compose(raw, target, target_layers, (width, height, duration), args.crf)
+        stamp.write_text(fingerprint + "\n")
+        print(f"wrote {target}")
+
+    if not args.no_gif:
+        gif_height = min(args.gif_height, height) if args.gif_height else None
+        for source in (video, output):
+            gif = folder / "gifs" / f"{source.stem}.gif"
+            export_gif(source, gif, args.gif_fps, args.gif_colors, gif_height, args.force)
+
+    if args.thumbnail_width:
+        make_thumbnails(folder / "screenshots", args.thumbnail_width, args.force)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

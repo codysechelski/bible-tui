@@ -44,8 +44,15 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   tables (the README keeps only the essentials). `docs/bible-databases.md` covers the database schema, metadata keys, and the bundled
   versions.
 - `docs/features/` has one page per feature, linked from `docs/features/index.md` and the README feature list.
-  Pages show the matching GIF from `docs/screenshots/gifs/` and stills from `docs/screenshots/images/`.
+  Pages embed the feature's `-with-keys` GIF and its stills straight from `.tapes/<feature>/`; the README
+  hero uses `.tapes/overview/gifs/overview.gif` (no keys) and the README thumbnails link to the feature pages.
   Screenshots must only show bundled or openly licensed versions.
+- `.tapes/` holds a VHS tape per feature. `.tapes/produce-video TAPE...` (needs vhs, ffmpeg, Pillow) records
+  it into `videos/`, `gifs/` (plain and `-with-keys`), and `screenshots/` (with `-thumbnail` copies);
+  `app-home` swaps in a clean app home while recording. The `.mp4` files are ignored by git.
+- `docs/logo/` has the logo (light and dark) and the app mark. `docs/screenshots/images/` keeps only the stills
+  that aren't recorded by a tape (`your-files.md`), and `docs/screenshots/social-preview.png` is the GitHub
+  social preview.
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and
   `FakeScreen` (lets `BibleTui` logic run without a terminal).
 - `.backlog/` (Backlog.md tasks) and `.agent/` are local-only and ignored by git; public issues live on GitHub.

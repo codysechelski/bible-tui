@@ -3,7 +3,7 @@
 `yy` copies the current verse. To copy part of a verse or several verses, select with `v` (characters) or `V`
 (whole verses) and press `y`.
 
-![Copying a verse, a selection, and several verses](../screenshots/gifs/bible-tui-yank-verse-yank-selection-yank-multi-line.gif)
+![Copying part of a verse, several verses, and a whole verse with and without yank_format, pasted into notes](../../.tapes/yanking/gifs/yanking-with-keys.gif)
 
 ## Choose what `yy` copies
 
@@ -15,8 +15,6 @@ anything else:
   "yank_format": "{text}\n\n  ~ {reference} {version}"
 }
 ```
-
-![Changing yank_format and copying a verse with its reference](../screenshots/gifs/bible-tui-change-yank-format.gif)
 
 The fields are `{text}`, `{reference}`, `{book}`, `{book_abbr}`, `{chapter}`, `{verse}`, `{version}`, and
 `{version_name}`. See [the `yy` copy format](../configuration.md#the-yy-copy-format) for examples.
