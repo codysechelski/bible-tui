@@ -18,7 +18,7 @@ Our guiding principle is **familiarity without complexity**: use Vim-inspired in
 These are intentional boundaries for the project's current direction, not missing features waiting to be implemented.
 
 - **Leader-key mappings.** A configurable leader key and the surrounding mapping conventions would add a layer of editor-like complexity that doesn't serve the core reading experience.
-- **Count-prefixed motions**, such as `5j` to move five positions. For now, we don't plan to add Vim's numeric motion prefixes. Their value is less compelling here without relative line numbers, and we prefer simpler, reading-oriented navigation.
+- **Count-prefixed motions**, such as `5j` to move five positions. We don't currently plan to add numeric motion prefixes because, without relative line numbers, it's difficult to judge how many positions to move. That makes counts less useful in practice—not inherently too complex. We're open to reconsidering them if someone demonstrates a compelling reader-focused use case or an effective approach that doesn't require relative line numbers.
 - **Relative line numbers.** We don't plan to introduce them. The book selector has no line numbers, and chapters and verses have meaningful, canonical numbers that should not be confused with editor-style line numbering.
 - **Vim compatibility as a goal.** We are not aiming for complete Vim motions, modes, remapping, or an editor-compatible command language simply for parity.
 
