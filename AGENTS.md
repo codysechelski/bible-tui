@@ -214,5 +214,7 @@ No linter or formatter is installed.
   When the agent itself runs inside tmux, an inexact `-t` can resolve to the agent's own pane, and the keys
   get typed into the user's session.
 - When adding a bundled version, add it under `bible_tui/bibles/` and to the table in
-  `docs/bible-databases.md`. If it's public domain, mention it in the README.
+  `docs/bible-databases.md`, and mention it in the README. A bundled version must be public domain or under
+  an open licence that allows redistribution; never bundle a copyrighted one (the README's section on copyrighted
+  versions explains this to users).
 - Keep this file updated as new conventions, commands, risks, or decisions come up.

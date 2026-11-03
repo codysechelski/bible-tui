@@ -12,6 +12,9 @@ them.
 
 ## Bundled versions
 
+Only versions in the public domain or under an open licence that lets them be shared are ever bundled.
+Any other version you have the rights to can be added as your own database (see [adding-bibles.md](adding-bibles.md)).
+
 | File | Version | Books, chapters, verses | Source | Licence |
 | --- | --- | --- | --- | --- |
 | `bible_tui/bibles/bible_kjv.sqlite` | King James Version (1769 standardized text) | 66, 1189, 31102 | [eBible.org](https://ebible.org/find/details.php?id=eng-kjv) | Public domain (outside the United Kingdom, where the Crown's letters patent restrict printing) |

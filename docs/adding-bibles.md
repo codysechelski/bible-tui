@@ -3,6 +3,10 @@
 bible-tui reads each version from one SQLite database. To add a version, put its database in a Bible folder
 and restart bible-tui. The KJV and ASV are already included.
 
+bible-tui only ships Bibles that are in the public domain or openly licensed. Copyrighted translations can't be
+distributed with it, but you can add any version you have the rights to use, either with the converter below or
+by [making a database another way](#making-a-database-another-way).
+
 Bible texts are usually published as USFM, USX, OSIS, or a similar format, not as SQLite. The companion
 [bible-tui-bible-converter](https://github.com/codysechelski/bible-tui-bible-converter) turns them into
 databases with the schema bible-tui expects. Like bible-tui, it needs only Python 3.9+.
@@ -91,3 +95,7 @@ bundled versions. See [configuration.md](configuration.md#where-bible-databases-
 Any tool can produce a database, as long as it matches the schema in
 [bible-databases.md](bible-databases.md#schema). In particular, use the canonical book `sort_order` (1 to 66)
 and leave out missing verses rather than storing empty text. The converter already follows these rules.
+
+You don't need the converter, or any particular source format, for this. Most coding agents can take Bible text
+from whatever source you have it in and write a SQLite file with this schema. Point the agent at
+[bible-databases.md](bible-databases.md#schema), then check the result with `bible-tui --list-versions`.
