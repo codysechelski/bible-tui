@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.9.2 (2026-11-04)
+
+### Bug Fixes
+
+- Keep the PyPI page's images and links working
+  ([#8](https://github.com/codysechelski/bible-tui/pull/8),
+  [`5d424c7`](https://github.com/codysechelski/bible-tui/commit/5d424c77b93e2fe6b6ab0df05270a4adc6318664))
+
+### Documentation
+
+- Clarify Vim-inspired navigation philosophy
+  ([#7](https://github.com/codysechelski/bible-tui/pull/7),
+  [`6cb15ea`](https://github.com/codysechelski/bible-tui/commit/6cb15ea7072de129d887088fb195a5f3c25d9363))
+
+- Explain that only public-domain and openly licensed Bibles are bundled
+  ([#6](https://github.com/codysechelski/bible-tui/pull/6),
+  [`048c4c7`](https://github.com/codysechelski/bible-tui/commit/048c4c7e601c915a8a284b9292ba35f00767c687))
+
+- Show fuzzy-find, go-to, and side-by-side thumbnails in the README
+  ([#5](https://github.com/codysechelski/bible-tui/pull/5),
+  [`605a0c9`](https://github.com/codysechelski/bible-tui/commit/605a0c97bd9663b16b85692922cc4a4ea39123e5))
+
+- Use the recorded tapes for screenshots and GIFs
+  ([#4](https://github.com/codysechelski/bible-tui/pull/4),
+  [`037164c`](https://github.com/codysechelski/bible-tui/commit/037164c620e9ebafc72719d21755b311bdef4737))
+
+
 ## v0.9.1 (2026-11-02)
 
 ### Bug Fixes
