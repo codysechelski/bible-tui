@@ -69,6 +69,14 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
+      # PyPI keeps each release's README for good, so its images and links must point at this release's tag,
+      # not at main, where files get moved or deleted later.
+      - name: Point the README's GitHub links at the release tag
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          sed -i -E "s#(raw\.githubusercontent\.com/codysechelski/bible-tui|github\.com/codysechelski/bible-tui/blob)/main/#\1/${TAG}/#g" README.md
+          ! grep -n -E "codysechelski/bible-tui(/blob)?/main/" README.md
       - name: Build the sdist and wheel
         run: |
           python -m pip install build
