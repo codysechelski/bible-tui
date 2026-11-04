@@ -80,6 +80,11 @@ No linter or formatter is installed.
   a GitHub Release. When a release was made, the `build` job builds the sdist and wheel from the new tag and
   the `publish` job uploads them to PyPI with trusted publishing (the `pypi` environment; no stored token).
   A failed publish can be retried with "Re-run failed jobs" without cutting another release.
+- The README is also the PyPI page, and PyPI keeps each release's copy for good. Its images and links must be
+  absolute `https://raw.githubusercontent.com/codysechelski/bible-tui/main/...` and
+  `https://github.com/codysechelski/bible-tui/blob/main/...` URLs: the `build` job rewrites `main` to the
+  release tag, so a release's page keeps working after files on `main` move. Relative links break on PyPI.
+  PyPI only shows a new README when a release is published (docs commits don't release).
 - Every action in the workflows is pinned to a commit SHA with the version in a comment. Dependabot
   (`.github/dependabot.yml`) opens monthly `ci:` PRs to update them. Keep new actions pinned the same way.
 - `main` is protected by a ruleset (no force pushes or deletion), and `v*` tags can't be moved or deleted.
