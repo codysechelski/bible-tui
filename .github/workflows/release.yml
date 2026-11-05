@@ -9,13 +9,57 @@ permissions:
   contents: read
 
 jobs:
+  # Whether anything besides docs changed. Docs-only changes skip the test matrix (and its slow-to-start
+  # macOS runner), but the workflow itself always runs, so the required `tests` check always reports.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          DOCS: '(\.md$|^docs/|^tapes/|^\.github/ISSUE_TEMPLATE/|^LICENSE$)'
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            range="$PR_BASE...$PR_HEAD"  # only what the pull request changes
+          else
+            range="$PUSH_BEFORE..$PUSH_AFTER"
+          fi
+          # When the range can't be read, test to be safe.
+          if ! changed="$(git diff --name-only "$range")"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -qvE "$DOCS"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Only docs changed; skipping the tests."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Every supported Python on Ubuntu; macOS (curses, termios, pbcopy, Homebrew) on the newest only,
+        # since macOS runners are slow to start.
+        os: [ubuntu-latest]
         python-version: ["3.9", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -26,9 +70,24 @@ jobs:
       - name: Tests
         run: python -m unittest discover -s tests -t .
 
+  # The one check the main ruleset requires: it passes when the matrix passed or was skipped for a docs-only
+  # change, and fails otherwise. Its name stays the same when the matrix changes.
+  tests:
+    needs: [changes, test]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          CHANGES: ${{ needs.changes.result }}
+          TEST: ${{ needs.test.result }}
+        run: |
+          echo "changes: $CHANGES, test: $TEST"
+          [ "$CHANGES" = success ] && { [ "$TEST" = success ] || [ "$TEST" = skipped ]; }
+
+  # The `!cancelled()` checks below keep a skipped test matrix (a docs-only push) from skipping these jobs too.
   release:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: tests
+    if: ${{ !cancelled() && needs.tests.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     concurrency:
       group: release
@@ -60,7 +119,7 @@ jobs:
   # If publishing fails, "Re-run failed jobs" retries it without cutting another release.
   build:
     needs: release
-    if: needs.release.outputs.released == 'true'
+    if: ${{ !cancelled() && needs.release.outputs.released == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,6 +147,7 @@ jobs:
 
   publish:
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: pypi

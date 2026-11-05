@@ -88,8 +88,11 @@ No linter or formatter is installed.
 
 ## Releases
 
-- Releases are automatic. `.github/workflows/release.yml` runs the tests on every push and pull request
-  (Ubuntu and macOS; Python 3.9, 3.13, and 3.14). On pushes to `main` it then runs python-semantic-release
+- Releases are automatic. `.github/workflows/release.yml` runs on every push to `main` and every pull request.
+  Its `changes` job skips the test matrix when only docs changed (`*.md`, `docs/`, `tapes/`, issue templates,
+  `LICENSE`). The matrix is Ubuntu on Python 3.9, 3.13, and 3.14, plus macOS on 3.14 only, because macOS
+  runners are slow to start. The `tests` job always runs and passes when the matrix passed or was skipped; it's
+  the check the ruleset requires, so keep its name. On pushes to `main` it then runs python-semantic-release
   (config in `[tool.semantic_release]` in `pyproject.toml`). That bumps `__version__` in
   `bible_tui/__init__.py`, updates `CHANGELOG.md`, commits `chore(release): X.Y.Z`, tags `vX.Y.Z`, and creates
   a GitHub Release. When a release was made, the `build` job builds the sdist and wheel from the new tag and
@@ -102,7 +105,10 @@ No linter or formatter is installed.
   PyPI only shows a new README when a release is published (docs commits don't release).
 - Every action in the workflows is pinned to a commit SHA with the version in a comment. Dependabot
   (`.github/dependabot.yml`) opens monthly `ci:` PRs to update them. Keep new actions pinned the same way.
-- `main` is protected by a ruleset (no force pushes or deletion), and `v*` tags can't be moved or deleted.
+- `main` is protected by a ruleset: no force pushes or deletion, changes go through pull requests, and the
+  `tests` and PR-title (`conventional`) checks must pass. The GitHub Actions app may bypass it, so the release
+  job can push its `chore(release)` commit, and so may repository admins. `v*` tags can't be moved or deleted.
+  Jobs after `tests` use `!cancelled()` conditions, so a skipped test matrix doesn't skip the release.
 - Pull requests are squash-merged with the PR title as the commit message, so the title decides the release.
   `.github/workflows/pr-title.yml` checks that it's a Conventional Commit.
 - Commit messages must follow Conventional Commits, because they decide the version: `fix:` → patch,
