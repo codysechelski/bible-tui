@@ -372,6 +372,7 @@ class BibleTui:
         marks: MarkStore | None = None,
         highlights: HighlightStore | None = None,
         nerd_font: bool = False,
+        show_clock: bool = True,
         yank_format: str = DEFAULT_YANK_FORMAT,
         update_check: UpdateCheck | None = None,
         install: Install | None = None,
@@ -393,6 +394,7 @@ class BibleTui:
         self.marks = marks if marks is not None else MarkStore(None)
         self.highlights = highlights if highlights is not None else HighlightStore(None)
         self.glyphs = {name: icon if nerd_font else plain for name, (icon, plain) in GLYPHS.items()}
+        self.show_clock = show_clock
         self.clock_format = locale_clock_format()
         self.mark_sign = self.glyphs["mark"]
         self.version_modal_open = False
@@ -496,13 +498,14 @@ class BibleTui:
 
     def input_timeout_ms(self) -> int:
         """The ``getch`` timeout: until the message fades or the top bar's clock ticks over to the next
-        minute, or sooner while an update check is out."""
-        clock = int((60 - time.time() % 60) * 1000) + 1
-        message = self.message_timeout_ms()
-        timeout = clock if message < 0 else min(message, clock)
+        minute, or sooner while an update check is out (-1: no limit)."""
+        timeouts = [self.message_timeout_ms()]
+        if self.show_clock:
+            timeouts.append(int((60 - time.time() % 60) * 1000) + 1)
         if self.update_check is not None and self.update_check.pending:
-            timeout = min(timeout, UPDATE_POLL_MS)
-        return timeout
+            timeouts.append(UPDATE_POLL_MS)
+        timeouts = [timeout for timeout in timeouts if timeout >= 0]
+        return min(timeouts) if timeouts else -1
 
     def poll_update_check(self) -> None:
         """Announce a newer release once, without covering a message that's showing."""
@@ -2537,8 +2540,8 @@ class BibleTui:
         return [(self.active_pane, content_y, x, content_h, text_w)]
 
     def draw_top_bar(self, y: int, width: int) -> None:
-        """The app's name behind a green cross on the left, the date and time on the right. The version
-        and book order are in the footer."""
+        """The app's name behind a green cross on the left, the date and time on the right (unless
+        ``show_clock`` is off). The version and book order are in the footer."""
         self.add_screen_line(y, "", width)
         usable = max(0, width - 1)
         icon = self.glyphs["title"]
@@ -2547,6 +2550,8 @@ class BibleTui:
         name = "Bible TUI"
         if name_x < usable:
             self.stdscr.addnstr(y, name_x, name, usable - name_x)
+        if not self.show_clock:
+            return
         clock = time.strftime(self.clock_format)
         clock_x = usable - 1 - len(clock)
         if clock_x > name_x + len(name) + 1:

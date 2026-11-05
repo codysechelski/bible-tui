@@ -233,6 +233,12 @@ class TuiUpdateTest(unittest.TestCase):
             check.thread = mock.Mock()  # Pretend the check is still out.
             self.assertEqual(app.input_timeout_ms(), UPDATE_POLL_MS)
 
+    def test_hidden_clock_never_wakes_the_loop(self) -> None:
+        app = make_app(make_check({}))
+        self.addCleanup(app.close)
+        app.show_clock = False
+        self.assertEqual(app.input_timeout_ms(), -1)
+
     def test_update_when_already_latest_does_nothing(self) -> None:
         check = make_check({}, latest="0.2.0")
         check.start()

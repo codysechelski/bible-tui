@@ -249,6 +249,7 @@ def run_tui(
             marks=marks,
             highlights=highlights,
             nerd_font=settings.nerd_font,
+            show_clock=settings.show_clock,
             yank_format=settings.yank_format,
             update_check=update_check,
             install=install,

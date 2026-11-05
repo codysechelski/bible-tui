@@ -38,6 +38,7 @@ Every key is optional. A missing file means all defaults.
   "bibles_dirs": ["~/Bibles", "/usr/share/bibles"],
   "book_order": "bible",
   "nerd_font": false,
+  "show_clock": true,
   "remember_split": false,
   "remember_position": false,
   "yank_format": "{text}",
@@ -51,6 +52,7 @@ Every key is optional. A missing file means all defaults.
 | `bibles_dirs` | `[]` | Extra folders to search for Bible databases. `~` is expanded; relative paths are taken from the config file's folder. A single string is accepted too. |
 | `book_order` | `"bible"` | Starting book order: `"bible"` (canonical, grouped by testament) or `"alphabetical"`. `a` still toggles it in the app. |
 | `nerd_font` | `false` | Set to `true` if your terminal uses a [Nerd Font](https://www.nerdfonts.com/) to get icons: the bookmark for marked verses, search and go-to icons, a check mark for the current version, clipboard and warning icons on messages, and an icon on verses a split pane's version leaves out. Off by default because a terminal program can't detect the font, and a missing glyph shows as an empty box. Without it, plain Unicode symbols (`●`) are used. |
+| `show_clock` | `true` | Show the date and time on the right of the top bar, in your system's date and time format. Set to `false` to hide it. |
 | `yank_format` | `"{text}"` | What `yy` copies for the current verse. See [The `yy` copy format](#the-yy-copy-format). |
 | `remember_split` | `false` | Set to `true` to reopen a split (`ctrl+w v` or `ctrl+w s`) at launch, with the same orientation and second-pane version. The split is saved in `state.json` as `split` and `split_version`. |
 | `remember_position` | `false` | Set to `true` to reopen at the verse you were on when you quit. It's saved in `state.json` as `position` (book order, chapter, and verse, so it carries across versions). When it's `false` the app opens at the first book's first chapter. |

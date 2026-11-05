@@ -44,6 +44,7 @@ class Settings:
     bibles_dirs: tuple[Path, ...] = ()
     book_order: str = "bible"
     nerd_font: bool = False
+    show_clock: bool = True
     remember_split: bool = False
     remember_position: bool = False
     yank_format: str = DEFAULT_YANK_FORMAT
@@ -84,7 +85,7 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"{path}: expected a JSON object at the top level")
 
     warnings: list[str] = []
-    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "remember_split", "remember_position", "yank_format", "check_for_updates"}
+    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "show_clock", "remember_split", "remember_position", "yank_format", "check_for_updates"}
     for key in sorted(set(data) - known):
         warnings.append(f"{path}: ignoring unknown setting {key!r}")
 
@@ -111,6 +112,10 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
     if not isinstance(nerd_font, bool):
         raise ConfigError(f"{path}: nerd_font must be true or false")
 
+    show_clock = data.get("show_clock", True)
+    if not isinstance(show_clock, bool):
+        raise ConfigError(f"{path}: show_clock must be true or false")
+
     remember_split = data.get("remember_split", False)
     if not isinstance(remember_split, bool):
         raise ConfigError(f"{path}: remember_split must be true or false")
@@ -133,6 +138,7 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         bibles_dirs=tuple(bibles_dirs),
         book_order=book_order,
         nerd_font=nerd_font,
+        show_clock=show_clock,
         remember_split=remember_split,
         remember_position=remember_position,
         yank_format=yank_format,
