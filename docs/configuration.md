@@ -63,7 +63,7 @@ naming the file, line, and key. Use `--config FILE` to read a different file.
 
 [Nerd Fonts](https://www.nerdfonts.com/) are regular programming fonts patched with extra symbols and icons. They let terminal apps display graphical-looking indicators as text characters; they don't change how the app works.
 
-Bible TUI can use these icons for marked verses, search and go-to actions, the selected Bible version, clipboard and warning messages, and verses missing from a version in split view. This is purely cosmetic: **a Nerd Font is not required** to read or navigate the Bible.
+Bible TUI can use these icons for the cross in the top bar, marked verses, search and go-to actions, the selected Bible version, clipboard and warning messages, and verses missing from a version in split view. This is purely cosmetic: **a Nerd Font is not required** to read or navigate the Bible.
 
 To enable them:
 
@@ -73,7 +73,8 @@ To enable them:
    brew install --cask font-jetbrains-mono-nerd-font
    ```
 
-   Any Nerd Font will work; you don't have to use JetBrains Mono.
+   Any Nerd Font will work; you don't have to use JetBrains Mono. The top bar's cross needs Nerd Fonts v3.3
+   or later; older Nerd Fonts show every other icon.
 2. Select that font in your **terminal emulator's font settings** (installing it alone does not make your terminal use it).
 3. Set `"nerd_font": true` in Bible TUI's `config.json`, then restart the app.
 

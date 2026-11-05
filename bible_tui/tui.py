@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import curses
+import locale
 import platform
 import re
 import shutil
@@ -73,9 +74,12 @@ MARK_SIGN_NERD_FONT = "\uf02e"  # nf-fa-bookmark, present in Nerd Fonts v2 and v
 MARK_SIGN_PLAIN = "\u25cf"  # ● renders in practically every font
 
 # Each glyph as (Nerd Font icon, plain fallback). Nerd Fonts are opt-in (the nerd_font setting) and never
-# detected. The icons are all Font Awesome 4 (nf-fa-*), whose code points are the same in Nerd Fonts v2 and
-# v3. Put a space after an icon: non-Mono Nerd Fonts draw it wider than the one cell curses counts.
+# detected. The icons are Font Awesome 4 (nf-fa-*), whose code points are the same in Nerd Fonts v2 and v3,
+# except the title cross: Font Awesome 4 has none, so it uses nf-fa-cross from the Font Awesome 6 icons
+# added in Nerd Fonts v3.3. Put a space after an icon: non-Mono Nerd Fonts draw it wider than the one cell
+# curses counts.
 GLYPHS: dict[str, tuple[str, str]] = {
+    "title": ("\ueec3", "\u271d"),  # nf-fa-cross (Nerd Fonts v3.3+), plain ✝: before the top bar's name
     "mark": (MARK_SIGN_NERD_FONT, MARK_SIGN_PLAIN),
     "missing": ("\uf070", ""),  # nf-fa-eye_slash: a verse one split pane's version leaves out
     "search": ("\uf002", "SEARCH"),  # nf-fa-search: the search footer prefix
@@ -341,6 +345,19 @@ FUZZY_HELP_ROWS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def locale_clock_format() -> str:
+    """A ``strftime`` format for the locale's weekday, date, and time to the minute (the top bar has no
+    seconds, so it only redraws once a minute)."""
+    try:
+        date_format = locale.nl_langinfo(locale.D_FMT)
+        time_format = locale.nl_langinfo(locale.T_FMT)
+    except (AttributeError, ValueError):  # nl_langinfo isn't available everywhere.
+        return "%a %x %X"
+    time_format = time_format.replace("%r", "%I:%M:%S %p").replace("%T", "%H:%M:%S")
+    time_format = re.sub(r"[:.]?%S", "", time_format).strip()
+    return f"%a {date_format or '%x'} {time_format or '%X'}"
+
+
 class BibleTui:
     def __init__(
         self,
@@ -376,6 +393,7 @@ class BibleTui:
         self.marks = marks if marks is not None else MarkStore(None)
         self.highlights = highlights if highlights is not None else HighlightStore(None)
         self.glyphs = {name: icon if nerd_font else plain for name, (icon, plain) in GLYPHS.items()}
+        self.clock_format = locale_clock_format()
         self.mark_sign = self.glyphs["mark"]
         self.version_modal_open = False
         self.version_mode = PICK_VERSION
@@ -477,10 +495,13 @@ class BibleTui:
         return max(1, int((self.message_until - time.monotonic()) * 1000) + 1)
 
     def input_timeout_ms(self) -> int:
-        """The ``getch`` timeout: until the message fades, or sooner while an update check is out."""
-        timeout = self.message_timeout_ms()
+        """The ``getch`` timeout: until the message fades or the top bar's clock ticks over to the next
+        minute, or sooner while an update check is out."""
+        clock = int((60 - time.time() % 60) * 1000) + 1
+        message = self.message_timeout_ms()
+        timeout = clock if message < 0 else min(message, clock)
         if self.update_check is not None and self.update_check.pending:
-            timeout = UPDATE_POLL_MS if timeout < 0 else min(timeout, UPDATE_POLL_MS)
+            timeout = min(timeout, UPDATE_POLL_MS)
         return timeout
 
     def poll_update_check(self) -> None:
@@ -578,7 +599,7 @@ class BibleTui:
             self.stdscr.timeout(self.input_timeout_ms())
             key = self.stdscr.getch()
             if key == -1:
-                continue  # Timed out to clear a message or collect the update check.
+                continue  # Timed out to clear a message, tick the clock, or collect the update check.
             if not self.handle_key(key):
                 return
 
@@ -2516,11 +2537,20 @@ class BibleTui:
         return [(self.active_pane, content_y, x, content_h, text_w)]
 
     def draw_top_bar(self, y: int, width: int) -> None:
-        order = "A-Z" if self.alphabetical else "Bible order"
-        # Split panes name their versions in their own titles.
-        version = "" if self.split_pane is not None else f"{self.version.name} | "
-        title = f" Bible TUI | {version}{order} "
-        self.add_screen_line(y, title, width)
+        """The app's name behind a green cross on the left, the date and time on the right. The version
+        and book order are in the footer."""
+        self.add_screen_line(y, "", width)
+        usable = max(0, width - 1)
+        icon = self.glyphs["title"]
+        self.stdscr.addnstr(y, 1, icon, max(0, usable - 1), curses.color_pair(5) | curses.A_BOLD)
+        name_x = 1 + len(icon) + 1
+        name = "Bible TUI"
+        if name_x < usable:
+            self.stdscr.addnstr(y, name_x, name, usable - name_x)
+        clock = time.strftime(self.clock_format)
+        clock_x = usable - 1 - len(clock)
+        if clock_x > name_x + len(name) + 1:
+            self.stdscr.addnstr(y, clock_x, clock, len(clock))
 
     def draw_books(self, y: int, x: int, h: int, w: int) -> None:
         win = self.stdscr.derwin(h, w, y, x)
@@ -2651,7 +2681,9 @@ class BibleTui:
             mode = " -- VISUAL LINE --" if self.visual_line else " -- VISUAL --"
             self.stdscr.addnstr(y, 0, mode, max(0, hint_x - 1), curses.color_pair(7) | curses.A_BOLD)
         left = len(mode) + 1
-        info = f"{version} | {location} | {focus}"
+        order = "A-Z" if self.alphabetical else "Bible order"
+        # The book order comes first, so it's the first to go when the footer is too narrow.
+        info = f"{order} | {version} | {location} | {focus}"
         room = hint_x - 2 - left
         if len(info) > room:
             info = "..." + info[-(room - 3) :] if room > 3 else ""

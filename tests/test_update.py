@@ -228,9 +228,10 @@ class TuiUpdateTest(unittest.TestCase):
         check = make_check({})
         app = make_app(check)
         self.addCleanup(app.close)
-        self.assertEqual(app.input_timeout_ms(), -1)
-        check.thread = mock.Mock()  # Pretend the check is still out.
-        self.assertEqual(app.input_timeout_ms(), UPDATE_POLL_MS)
+        with mock.patch("time.time", return_value=6_000_030.0):  # Half a minute in.
+            self.assertEqual(app.input_timeout_ms(), 30_001)  # Wakes for the clock's next minute.
+            check.thread = mock.Mock()  # Pretend the check is still out.
+            self.assertEqual(app.input_timeout_ms(), UPDATE_POLL_MS)
 
     def test_update_when_already_latest_does_nothing(self) -> None:
         check = make_check({}, latest="0.2.0")
