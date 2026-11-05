@@ -53,7 +53,10 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   32 colors), and `screenshots/` (with `-thumbnail` copies). `--gifs-only` re-exports the GIFs from the
   existing videos. `app-home` swaps in a clean app home while recording. Git ignores the `.mp4` files, the
   `_large` GIFs, and the `.stamp`/`.recorded` build markers.
-- `docs/logo/` has the logo (light and dark) and the app mark. `docs/screenshots/images/` keeps only the stills
+- `docs/logo/svg/` has the logo SVGs (full, squarish, mark-only, and text-only, each for dark and light
+  backgrounds), `docs/logo/png/` has PNG exports of each at common sizes, and `docs/logo/source/` has the `.ai`
+  source. The README uses the full
+  logo, never the squarish one. `docs/screenshots/images/` keeps only the stills
   that aren't recorded by a tape (`your-files.md`), and `docs/screenshots/social-preview.png` is the GitHub
   social preview.
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and

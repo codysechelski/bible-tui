@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/logo/bible-tui-logo-dark.png">
-    <img alt="bible-tui" src="https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/logo/bible-tui-logo-light.png" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/logo/png/bible-tui-logo_full-for-dark-bg_800w.png">
+    <img alt="bible-tui" src="https://raw.githubusercontent.com/codysechelski/bible-tui/main/docs/logo/png/bible-tui-logo_full-for-light-bg_800w.png" width="400">
   </picture>
 </h1>
 
