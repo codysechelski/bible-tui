@@ -32,6 +32,9 @@ A tape with no `Output ... .mp4` line only takes screenshots: there's no video, 
 with a `card.json` gets a card composed from one of its screenshots (see CARD_DEFAULTS), written wherever the
 card says; the social-preview tape makes `docs/screenshots/social-preview.png` this way.
 
+`--reel` (implied by `-a`) runs produce-reel afterwards, which cuts the videos into the highlights reel and
+redoes only the parts whose videos or words changed.
+
 Overlays are asked for with directive comments, which VHS ignores:
 
     #@ footnote bible-livre          show overlays/bible-livre.txt (one paragraph per line) from here on
@@ -903,6 +906,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true",
                         help="re-record and re-render even if the outputs are up to date")
     parser.add_argument("--dry-run", action="store_true", help="print the keystroke timeline and exit")
+    parser.add_argument("--reel", action="store_true",
+                        help="then run produce-reel to update the highlights reel (implied by --all)")
     args = parser.parse_args(argv)
     if args.all:
         if args.tapes:
@@ -912,8 +917,9 @@ def main(argv: list[str] | None = None) -> int:
         if not args.tapes:
             sys.exit(f"produce-media: no tape folders in {root}")
         args.force = True
-    elif not args.tapes:
-        parser.error("give at least one tape or folder, or --all")
+        args.reel = True
+    elif not args.tapes and not args.reel:
+        parser.error("give at least one tape or folder, --all, or --reel")
     if args.gifs_only and args.no_gif:
         parser.error("--gifs-only and --no-gif can't be used together")
     if args.output and len(args.tapes) > 1:
@@ -943,6 +949,10 @@ def main(argv: list[str] | None = None) -> int:
                       file=sys.stderr)
                 failed.append(str(tape_arg))
     bin_dir.cleanup()
+    if args.reel and not args.dry_run:
+        print("\n==== highlights reel", flush=True)
+        if subprocess.run([str(ROOT / "produce-reel")]).returncode != 0:
+            failed.append("highlights reel")
     if failed:
         print(f"produce-media: {len(failed)} of {len(args.tapes)} failed: {', '.join(failed)}", file=sys.stderr)
         return 1

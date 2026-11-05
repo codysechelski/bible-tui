@@ -59,6 +59,12 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   `.mp4` Output only takes screenshots, and a folder with `card.json` gets a composed card: the
   `social-preview` tape makes `docs/screenshots/social-preview.png`. Git ignores the `.mp4` files, the
   `_large` GIFs, and the `.stamp`/`.recorded` build markers.
+- `.tapes/produce-reel` cuts the tapes' `-with-keys` videos into a shareable highlights reel, in 16:9 and 1:1
+  (`.tapes/reel/videos/bible-tui-reel_<format>.mp4`, ignored by git like every `.mp4`): an intro card, a leader
+  and a framed clip per feature, and an outro with the install commands and GitHub link. `.tapes/reel/reel.json`
+  holds the words and each clip's video, start, duration, and speed. Segments are cached in
+  `.tapes/reel/build/` (ignored) under hashes of their inputs, so a run only re-renders what changed.
+  `produce-media -a` (or `--reel`) runs it at the end. Bump its `VERSION` when the rendering changes.
 - `docs/logo/svg/` has the logo SVGs (full, squarish, mark-only, and text-only, each for dark and light
   backgrounds), `docs/logo/png/` has PNG exports of each at common sizes, and `docs/logo/source/` has the `.ai`
   source. The README uses the full
