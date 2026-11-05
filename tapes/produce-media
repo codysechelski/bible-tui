@@ -675,33 +675,81 @@ def compose(video: Path, output: Path, layers: list[tuple[list, object]], size: 
         partial.replace(output)
 
 
+# Colors every GIF palette keeps, measured from the recordings (Dracula theme as VHS draws it) and this
+# script's overlays. ffmpeg's own palette picks colors by how many pixels use them, and in a terminal that's
+# the background and its anti-aliased shades, so small accents such as the highlight swatches lost their slots
+# and merged (green looked cyan, purple and pink looked the same). These are reserved; ffmpeg picks the rest.
+GIF_COLORS = [
+    "1d1e29",  # background
+    "bbbbbb",  # text
+    "f8f8f2",  # bright text
+    "60606a",  # dim text (footer, hints)
+    "35353f",  # unfocused borders
+    "8be9fd",  # cyan: the selection bar
+    "1d6376",  # dark cyan
+    "50fa7b",  # green: the focused pane's border and title
+    "82d69c",  # soft green
+    "f1fa8c",  # yellow: verse numbers
+    "bd93f9",  # purple: headings, the newest keycap's outline
+    "ff79c6",  # pink
+    "ff5555",  # red: errors
+    "ff8700",  # orange: search matches
+    "fed787", "87d687", "87aeff", "d7aefe", "ffafd8", "ffae5f",  # the six highlight tints
+    "282a36",  # keycap fill
+    "6272a4",  # older keycaps' outline
+]
+
+
+def gif_palette(source: Path, fps: float, colors: int, scaling: str, folder: Path) -> Path:
+    """A `colors`-color palette: GIF_COLORS, then ffmpeg's picks for the clip's other colors (mostly the
+    anti-aliased edges of text), as the 16x16 image paletteuse reads."""
+    picks = folder / "picks.png"
+    spare = max(1, colors - len(GIF_COLORS))
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source), "-vf",
+                    f"fps={fps}{scaling},palettegen=max_colors={spare}:stats_mode=diff", str(picks)], check=True)
+    chosen = [tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4)) for hex_color in GIF_COLORS]
+    with Image.open(picks) as image:
+        found = list(dict.fromkeys(image.convert("RGB").getdata()))
+    for color in found:
+        if len(chosen) >= colors:
+            break
+        if all(sum((a - b) ** 2 for a, b in zip(color, kept)) > 64 for kept in chosen):
+            chosen.append(color)
+    palette = Image.new("RGB", (16, 16))
+    palette.putdata([chosen[i] if i < len(chosen) else chosen[0] for i in range(256)])
+    path = folder / "palette.png"
+    palette.save(path)
+    return path
+
+
 def export_gif(source: Path, gif: Path, fps: float, colors: int, scale: str | None, force: bool) -> None:
     """Export `source` as a looping GIF, spending the size budget on pixels over colors. `scale` is an ffmpeg
     `width:height` (one side -2 to keep the aspect ratio), or None to keep the video's size."""
     fingerprint = hashlib.sha256(json.dumps({
         "version": VERSION, "source": [source.stat().st_size, source.stat().st_mtime_ns],
-        "fps": fps, "colors": colors, "scale": scale,
+        "fps": fps, "colors": colors, "scale": scale, "palette": GIF_COLORS,
     }, sort_keys=True).encode()).hexdigest()
     stamp = gif.with_name(f".{gif.name}.stamp")
     if not force and gif.is_file() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
         print(f"up to date: {gif}")
         return
-    # One palette for the whole clip (terminal recordings use few colors). Ordered dithering keeps frames
-    # stable, and diff_mode=rectangle only re-encodes the part of each frame that changed.
+    # One palette for the whole clip (see GIF_COLORS). No dithering: the UI's colors are in the palette
+    # exactly, so there's nothing to dither, and text edges stay clean. diff_mode=rectangle only re-encodes the
+    # part of each frame that changed.
     scaling = f",scale={scale}:flags=lanczos" if scale else ""
-    filters = (
-        f"fps={fps}{scaling},split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
-        "[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"
-    )
     partial = gif.with_name(f".{gif.stem}.partial.gif")
-    command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-stats", "-y", "-i", str(source),
-               "-filter_complex", filters, "-loop", "0", str(partial)]
-    print("$ " + " ".join(shlex.quote(part) for part in command))
-    try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError as error:
-        partial.unlink(missing_ok=True)
-        sys.exit(f"produce-media: ffmpeg failed making {gif.name} ({error.returncode})")
+    with tempfile.TemporaryDirectory(prefix="produce-media-gif-") as work:
+        try:
+            palette = gif_palette(source, fps, colors, scaling, Path(work))
+            command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-stats", "-y", "-i", str(source),
+                       "-i", str(palette), "-filter_complex",
+                       f"[0:v]fps={fps}{scaling}[v];[v][1:v]paletteuse=dither=none:diff_mode=rectangle",
+                       "-loop", "0", str(partial)]
+            print("$ " + " ".join(shlex.quote(part) for part in command))
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError as error:
+            partial.unlink(missing_ok=True)
+            sys.exit(f"produce-media: ffmpeg failed making {gif.name} ({error.returncode})")
     partial.replace(gif)
     stamp.write_text(fingerprint + "\n")
     print(f"wrote {gif} ({gif.stat().st_size / 1_000_000:.1f} MB)")

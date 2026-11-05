@@ -50,7 +50,9 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   Screenshots must only show bundled or openly licensed versions.
 - `tapes/` holds a VHS tape per feature. `tapes/produce-media TAPE...` (or `-a` for all; needs vhs, ffmpeg,
   Pillow) records it into `videos/`, `gifs/` (plain and `-with-keys`, each as `_large` at 720p and `_small` at
-  960 px wide with 32 colors), and `screenshots/` (with `-thumbnail` copies). `--gifs-only` re-exports the GIFs
+  960 px wide with 32 colors), and `screenshots/` (with `-thumbnail` copies). Every GIF palette keeps the UI's
+  colors (`GIF_COLORS`: the theme's accents and the six highlight tints, measured from the recordings) and lets
+  ffmpeg pick only the rest, without dithering; add a color there when the app gains one. `--gifs-only` re-exports the GIFs
   from the existing videos. Tapes record this working copy, not the installed app: `bible-tui` runs the
   repo's `./bible-tui` (named in `$BIBLE_TUI_TAPE_BIN`). `app-home` swaps in a clean app home while recording
   (`defaults/config.json`, which turns the clock off so recordings don't change with the time). `sandbox`
