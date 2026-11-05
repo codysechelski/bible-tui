@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import locale
 import unittest
 from unittest import mock
 
@@ -11,6 +12,7 @@ from bible_tui.tui import (
     MESSAGE_SECONDS,
     MESSAGE_YANK,
     BibleTui,
+    locale_clock_format,
 )
 from bible_tui.versions import discover_versions, find_version
 
@@ -36,8 +38,25 @@ class GlyphTest(unittest.TestCase):
         self.addCleanup(app.close)
         self.assertEqual(app.glyphs, {name: icon for name, (icon, _) in GLYPHS.items()})
         self.assertEqual(app.fuzzy_prompt(), "  ")
-        # Font Awesome 4 range, the same in Nerd Fonts v2 and v3.
-        self.assertTrue(all("" <= icon <= "" for icon, _ in GLYPHS.values()))
+        # Font Awesome 4 range, the same in Nerd Fonts v2 and v3. Font Awesome 4 has no cross, so the title
+        # uses Nerd Fonts v3.3's nf-fa-cross.
+        icons = [icon for name, (icon, _) in GLYPHS.items() if name != "title"]
+        self.assertTrue(all("" <= icon <= "" for icon in icons))
+        self.assertEqual(GLYPHS["title"], ("\ueec3", "\u271d"))
+
+    def test_clock_format_drops_seconds(self) -> None:
+        def langinfo(item: int) -> str:
+            return {locale.D_FMT: "%d.%m.%Y", locale.T_FMT: "%H:%M:%S"}[item]
+
+        with mock.patch("bible_tui.tui.locale.nl_langinfo", side_effect=langinfo):
+            self.assertEqual(locale_clock_format(), "%a %d.%m.%Y %H:%M")
+
+    def test_clock_format_expands_twelve_hour_time(self) -> None:
+        def langinfo(item: int) -> str:
+            return {locale.D_FMT: "%m/%d/%Y", locale.T_FMT: "%r"}[item]
+
+        with mock.patch("bible_tui.tui.locale.nl_langinfo", side_effect=langinfo):
+            self.assertEqual(locale_clock_format(), "%a %m/%d/%Y %I:%M %p")
 
 
 class MessageTest(unittest.TestCase):

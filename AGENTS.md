@@ -131,8 +131,12 @@ No linter or formatter is installed.
   from everyday navigation to app commands, with plain-language names ("copy verse", not "yank"). Up/Down wrap
   around at either end, and a group's heading scrolls into view with its first command. The footer prompt keeps
   `ctrl+p` white and `commands` in the dim footer gray.
+- Top bar (`draw_top_bar`): a green cross (`glyphs["title"]`) and `Bible TUI` on the left, the date and time
+  on the right (`locale_clock_format`: the locale's weekday, date, and time to the minute). The run loop's
+  `getch` timeout wakes at each new minute to redraw the clock. The version and book order are in the footer,
+  not the top bar.
 - Footer layout (`draw_status`), Vim-style: the mode (`-- VISUAL --`) on the left. The place info
-  (version, reference, focus) is right-aligned just before the `ctrl+p` hint, and the timed message sits
+  (book order, version, reference, focus) is right-aligned just before the `ctrl+p` hint, and the timed message sits
   just left of the place info. Keep the left side free for modes.
 - `:` opens the footer command line (`cmdline_*`, `draw_cmdline`), with a completion menu above it.
   `EX_COMMANDS` lists the commands; a command runs from any prefix at least as long as its `short`
@@ -165,7 +169,9 @@ No linter or formatter is installed.
   in blue. Nerd Font use is always opt-in; never try to detect the font. Every icon lives in the `GLYPHS`
   table as `(Nerd Font icon, plain fallback)` and is read through `self.glyphs[name]`. Add new icons there,
   only Font Awesome 4 (`nf-fa-*`) code points (stable across Nerd Fonts v2 and v3; `nf-md-*` moved in v3),
-  and follow each icon with a space because non-Mono Nerd Fonts draw it wider than one cell.
+  and follow each icon with a space because non-Mono Nerd Fonts draw it wider than one cell. The one
+  exception is the top bar's `title` cross: Font Awesome 4 has none, so it uses `nf-fa-cross` (U+EEC3, from
+  the Font Awesome 6 icons added in Nerd Fonts v3.3), with `✝` as the plain fallback.
 - Footer messages: assigning `self.message` shows an info message; `set_message(text, MESSAGE_YANK)` and
   `show_error(text)` set the other kinds. Messages draw in yellow (errors in bold red, with the warning icon
   when `nerd_font` is on) and clear themselves after `MESSAGE_SECONDS`: `run` sets a `getch` timeout from
