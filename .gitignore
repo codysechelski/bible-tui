@@ -11,3 +11,4 @@ dist/
 .tapes/**/.*.stamp
 .tapes/**/.*.recorded
 *_large.gif
+.tapes/reel/build/

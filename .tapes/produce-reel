@@ -1,0 +1,497 @@
+#!/usr/bin/env python3
+"""Cut the tapes' videos into a shareable highlights reel: an intro card, then for each feature a short leader
+(its name, what it does, and a few bullets) and a clip of it in a framed window with an animated title, then
+an outro card that says how to install bible-tui and where it is on GitHub.
+
+Usage: produce-reel [--force] [--format 16x9|1x1 ...] [--spec reel/reel.json]
+
+What goes in the reel is reel/reel.json: the cards' words, and per feature a video (a path under .tapes/, made
+by produce-media), where the clip starts, how long it runs, and how much faster it plays. Each format
+(`16x9` at 1920x1080 and `1x1` at 1080x1080) is written to reel/videos/bible-tui-reel_<format>.mp4.
+
+Nothing is redone that doesn't need to be. Every segment (a card, a leader, or a clip) is rendered to
+reel/build/<format>/ under a name hashed from everything that goes into it: its words and timing, this
+script's VERSION, the logo, and for clips the source video's contents. A segment whose hash already exists is
+reused, and the final cut is only re-joined when the list of segments changed. So re-running after
+produce-media re-renders only the clips whose videos changed (or everything, when the app's look changed
+them all), and does nothing at all when nothing did. `--force` renders everything again.
+
+produce-media runs this after `-a` or with `--reel`. Needs ffmpeg and Pillow, like produce-media, whose fonts
+and card background it shares.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+
+
+def load_media_module():
+    """produce-media (a script without a .py name) as a module, for its fonts and card background."""
+    loader = importlib.machinery.SourceFileLoader("produce_media", str(ROOT / "produce-media"))
+    spec = importlib.util.spec_from_loader("produce_media", loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["produce_media"] = module  # its dataclasses look their module up while it loads
+    loader.exec_module(module)
+    return module
+
+
+media = load_media_module()
+Image, ImageDraw = media.Image, media.ImageDraw
+
+VERSION = "1"  # bump when the rendering changes, so every segment is redone
+FPS = 30
+TRANSITION = 0.4  # seconds of crossfade between segments
+FORMATS = {"16x9": (1920, 1080), "1x1": (1080, 1080)}
+REPO = ROOT.parent
+LOGO = REPO / "docs/logo/png/bible-tui-logo_full-for-dark-bg_1600w.png"
+
+GREEN = (99, 213, 134)  # the logo's green
+TEXT = media.CARD_TEXT
+MUTED = media.CARD_MUTED
+DIM = media.CARD_DIM
+PILL = (24, 27, 38)
+PILL_EDGE = (62, 68, 88)
+
+SANS = "/System/Library/Fonts/HelveticaNeue.ttc"
+SANS_FACES = {"regular": 0, "bold": 1, "medium": 10, "light": 7}
+
+
+def font(size: int, face: str = "regular", mono: bool = False):
+    if mono:
+        return media.load_font(None, size, media.MONO_FONT_CANDIDATES)
+    if Path(SANS).is_file():
+        return media.ImageFont.truetype(SANS, size, index=SANS_FACES[face])
+    return media.load_font(None, size, media.TEXT_FONT_CANDIDATES)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for block in iter(lambda: file.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def run(command: list[str], **kwargs) -> None:
+    subprocess.run(command, check=True, **kwargs)
+
+
+# ---- Drawing ----------------------------------------------------------------------------------------
+
+
+def wrap(text: str, typeface, width: int) -> list[str]:
+    lines, line = [], ""
+    for word in text.split():
+        candidate = f"{line} {word}" if line else word
+        if line and typeface.getlength(candidate) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    return lines + [line] if line else lines
+
+
+def text_layer(lines: list[str], typeface, color, line_height: float = 1.25, align: str = "left") -> Image.Image:
+    """Lines of text on a transparent image just big enough for them."""
+    ascent, descent = typeface.getmetrics()
+    step = round((ascent + descent) * line_height)
+    width = max(1, max(round(typeface.getlength(line)) for line in lines))
+    image = Image.new("RGBA", (width + 4, step * (len(lines) - 1) + ascent + descent + 4), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    for index, line in enumerate(lines):
+        x = (width - typeface.getlength(line)) / 2 if align == "center" else 0
+        draw.text((x, index * step), line, font=typeface, fill=color)
+    return image
+
+
+def bullet_layer(text: str, typeface, unit: float) -> Image.Image:
+    box = round(12 * unit)
+    label = text_layer([text], typeface, TEXT)
+    image = Image.new("RGBA", (label.width + round(30 * unit), max(label.height, box)), (0, 0, 0, 0))
+    ascent, _ = typeface.getmetrics()
+    top = round(ascent * 0.62) - box // 2
+    ImageDraw.Draw(image).rounded_rectangle((0, top, box, top + box), max(1, round(3 * unit)), fill=GREEN)
+    image.alpha_composite(label, (round(30 * unit), 0))
+    return image
+
+
+def pill_layer(command: str, typeface, unit: float) -> Image.Image:
+    """A shell command in a rounded box, with a green prompt."""
+    pad_x, pad_y = round(28 * unit), round(18 * unit)
+    prompt = "$ "
+    ascent, descent = typeface.getmetrics()
+    width = round(typeface.getlength(prompt + command)) + 2 * pad_x
+    height = ascent + descent + 2 * pad_y
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((0, 0, width - 1, height - 1), round(14 * unit), fill=(*PILL, 255),
+                           outline=(*PILL_EDGE, 255), width=max(1, round(2 * unit)))
+    draw.text((pad_x, pad_y), prompt, font=typeface, fill=GREEN)
+    draw.text((pad_x + typeface.getlength(prompt), pad_y), command, font=typeface, fill=TEXT)
+    return image
+
+
+def ease_out(p: float) -> float:
+    p = min(1.0, max(0.0, p))
+    return 1 - (1 - p) ** 3
+
+
+class Scene:
+    """Layers that fade in and rise into place one after another, over a fixed background."""
+
+    rise_time = 0.55
+
+    def __init__(self, background: Image.Image, unit: float):
+        self.background = background.convert("RGBA")
+        self.unit = unit
+        self.items: list[tuple[Image.Image, int, int, float, float]] = []  # layer, x, y, delay, start scale
+
+    def add(self, layer: Image.Image, x: int, y: int, delay: float, scale: float = 1.0) -> None:
+        self.items.append((layer, x, y, delay, scale))
+
+    def frame(self, t: float) -> Image.Image:
+        image = self.background.copy()
+        rise = 28 * self.unit
+        for layer, x, y, delay, scale in self.items:
+            p = ease_out((t - delay) / self.rise_time)
+            if p <= 0:
+                continue
+            shown = layer
+            if scale != 1.0 and p < 1:
+                factor = scale + (1 - scale) * p
+                shown = layer.resize((max(1, round(layer.width * factor)), max(1, round(layer.height * factor))),
+                                     Image.LANCZOS)
+            if p < 1:
+                alpha = shown.getchannel("A").point(lambda v, p=p: round(v * p))
+                shown = shown.copy()
+                shown.putalpha(alpha)
+            dx = (layer.width - shown.width) // 2
+            dy = (layer.height - shown.height) // 2 + (0 if scale != 1.0 else round(rise * (1 - p)))
+            image.alpha_composite(shown, (x + dx, y + dy))
+        return image
+
+
+def encode_scene(scene: Scene, duration: float, size: tuple[int, int], output: Path) -> None:
+    """Pipe the scene's frames to ffmpeg."""
+    width, height = size
+    partial = output.with_name(f".{output.name}.partial.mp4")
+    process = subprocess.Popen(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
+         "-s", f"{width}x{height}", "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-crf", "18",
+         "-preset", "medium", "-pix_fmt", "yuv420p", str(partial)],
+        stdin=subprocess.PIPE,
+    )
+    for index in range(round(duration * FPS)):
+        process.stdin.write(scene.frame(index / FPS).convert("RGB").tobytes())
+    process.stdin.close()
+    if process.wait() != 0:
+        sys.exit(f"produce-reel: ffmpeg failed writing {output}")
+    partial.replace(output)
+
+
+# ---- Segments ---------------------------------------------------------------------------------------
+
+
+class Layout:
+    """Sizes and positions for one format, scaled from the 1080 px tall design."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.size = FORMATS[name]
+        self.width, self.height = self.size
+        self.square = self.width == self.height
+        self.unit = self.height / 1080
+        self.margin = self.px(100 if self.square else 240)
+        self.text_width = self.width - 2 * self.margin
+
+    def px(self, value: float) -> int:
+        return round(value * self.unit)
+
+    def background(self) -> Image.Image:
+        return media.card_background(self.size)
+
+
+def render_intro(spec: dict, layout: Layout, output: Path) -> None:
+    scene = Scene(layout.background(), layout.unit)
+    with Image.open(LOGO) as logo:
+        logo_w = layout.px(760 if layout.square else 900)
+        logo = logo.convert("RGBA").resize((logo_w, round(logo.height * logo_w / logo.width)), Image.LANCZOS)
+    tagline = text_layer(wrap(spec["tagline"], font(layout.px(52), "light"), layout.text_width),
+                         font(layout.px(52), "light"), TEXT, align="center")
+    subtitle = text_layer([spec["subtitle"]], font(layout.px(30), mono=True), DIM)
+    gap = layout.px(56)
+    total = logo.height + gap + tagline.height + layout.px(36) + subtitle.height
+    y = (layout.height - total) // 2
+    scene.add(logo, (layout.width - logo.width) // 2, y, 0.15, scale=0.92)
+    y += logo.height + gap
+    scene.add(tagline, (layout.width - tagline.width) // 2, y, 0.8)
+    y += tagline.height + layout.px(36)
+    scene.add(subtitle, (layout.width - subtitle.width) // 2, y, 1.3)
+    encode_scene(scene, spec["duration"], layout.size, output)
+
+
+def render_leader(feature: dict, number: int, count: int, layout: Layout, duration: float, output: Path) -> None:
+    scene = Scene(layout.background(), layout.unit)
+    counter = text_layer([f"{number:02d} / {count:02d}"], font(layout.px(28), mono=True), GREEN)
+    title_font = font(layout.px(92 if layout.square else 104), "bold")
+    title = text_layer(wrap(feature["title"], title_font, layout.text_width), title_font, TEXT, line_height=1.1)
+    body_font = font(layout.px(38), "light")
+    body = text_layer(wrap(feature["description"], body_font, layout.text_width), body_font, MUTED)
+    bullet_font = font(layout.px(34))
+    bullets = [bullet_layer(text, bullet_font, layout.unit) for text in feature.get("bullets", [])]
+    rule = Image.new("RGBA", (layout.px(72), layout.px(5)), (*GREEN, 255))
+
+    gaps = [layout.px(28), layout.px(26), layout.px(34), layout.px(54)]
+    bullet_step = layout.px(58)
+    total = (counter.height + gaps[0] + title.height + gaps[1] + rule.height + gaps[2] + body.height
+             + (gaps[3] + bullet_step * len(bullets) if bullets else 0))
+    x, y = layout.margin, (layout.height - total) // 2
+    scene.add(counter, x, y, 0.1)
+    y += counter.height + gaps[0]
+    scene.add(title, x, y, 0.2)
+    y += title.height + gaps[1]
+    scene.add(rule, x, y, 0.35)
+    y += rule.height + gaps[2]
+    scene.add(body, x, y, 0.5)
+    y += body.height + gaps[3]
+    for index, bullet in enumerate(bullets):
+        scene.add(bullet, x, y + index * bullet_step, 0.9 + 0.22 * index)
+    encode_scene(scene, duration, layout.size, output)
+
+
+def window_geometry(layout: Layout) -> tuple[int, int, int, int, int]:
+    """(x, y, width, clip height, title bar height) of the clip's window."""
+    width = layout.px(960) if layout.square else layout.px(1440)
+    bar = layout.px(34)
+    clip_h = round(width * 9 / 16)
+    x = (layout.width - width) // 2
+    y = layout.px(330) if layout.square else layout.height - clip_h - bar - layout.px(58)
+    return x, y, width, clip_h, bar
+
+
+def clip_background(layout: Layout) -> Image.Image:
+    """The gradient with an empty terminal window (and its shadow) for the clip to play in."""
+    image = layout.background().convert("RGBA")
+    x, y, width, clip_h, bar = window_geometry(layout)
+    radius = layout.px(14)
+    shadow = Image.new("RGBA", layout.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle((x, y + layout.px(18), x + width, y + bar + clip_h + layout.px(18)),
+                                             radius, fill=(0, 0, 0, 160))
+    image.alpha_composite(shadow.filter(media.ImageFilter.GaussianBlur(layout.px(28))))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((x, y, x + width - 1, y + bar + clip_h - 1), radius, fill=(*media.CARD_WINDOW, 255),
+                           outline=(70, 74, 92, 255), width=max(1, layout.px(1.5)))
+    draw.rounded_rectangle((x + 1, y + 1, x + width - 2, y + bar), radius, fill=(*media.CARD_BAR, 255))
+    draw.rectangle((x + 1, y + bar - radius, x + width - 2, y + bar), fill=(*media.CARD_BAR, 255))
+    for index, color in enumerate(((255, 95, 86), (255, 189, 46), (39, 201, 63))):
+        cx, r = x + layout.px(22) + index * layout.px(22), layout.px(7)
+        draw.ellipse((cx - r, y + bar // 2 - r, cx + r, y + bar // 2 + r), fill=color)
+    label_font = font(layout.px(16), mono=True)
+    label = "bible-tui"
+    draw.text((x + (width - label_font.getlength(label)) / 2, y + bar / 2), label, font=label_font, fill=DIM,
+              anchor="lm")
+    if layout.square:
+        mark_font = font(layout.px(26), mono=True)
+        mark = "bible-tui"
+        draw.text(((layout.width - mark_font.getlength(mark)) / 2, layout.height - layout.px(76)), mark,
+                  font=mark_font, fill=DIM)
+    return image
+
+
+def caption_layer(feature: dict, layout: Layout) -> Image.Image:
+    """The feature's name and one-line description over the window, as a full-frame transparent image."""
+    image = Image.new("RGBA", layout.size, (0, 0, 0, 0))
+    x, y, width, _, _ = window_geometry(layout)
+    title_font = font(layout.px(60 if layout.square else 54), "bold")
+    body_font = font(layout.px(32 if layout.square else 30), "light")
+    summary = feature.get("caption", feature["description"])
+    if layout.square:
+        title = text_layer([feature["title"]], title_font, TEXT, align="center")
+        body = text_layer(wrap(summary, body_font, layout.px(900)), body_font, MUTED, align="center")
+        top = layout.px(84)
+        image.alpha_composite(title, ((layout.width - title.width) // 2, top))
+        image.alpha_composite(body, ((layout.width - body.width) // 2, top + title.height + layout.px(18)))
+    else:
+        title = text_layer([feature["title"]], title_font, TEXT)
+        body = text_layer(wrap(summary, body_font, width - title.width - layout.px(60)), body_font, MUTED)
+        top = layout.px(52)
+        image.alpha_composite(title, (x, top))
+        ascent = title_font.getmetrics()[0]
+        body_ascent = body_font.getmetrics()[0]
+        image.alpha_composite(body, (x + title.width + layout.px(40), top + ascent - body_ascent))
+        rule = Image.new("RGBA", (layout.px(56), layout.px(4)), (*GREEN, 255))
+        image.alpha_composite(rule, (x, top - layout.px(18)))
+    return image
+
+
+def render_clip(feature: dict, layout: Layout, duration: float, source: Path, build: Path, output: Path) -> None:
+    background = build / f".{output.stem}-background.png"
+    caption = build / f".{output.stem}-caption.png"
+    clip_background(layout).convert("RGB").save(background)
+    caption_layer(feature, layout).save(caption)
+    x, y, width, clip_h, bar = window_geometry(layout)
+    speed = float(feature.get("speed", 1.0))
+    rise = layout.px(24)
+    progress_h = max(2, layout.px(5))
+    graph = (
+        f"[1:v]setpts=(PTS-STARTPTS)/{speed},fps={FPS},scale={width}:{clip_h}:flags=lanczos[clip];"
+        f"[0:v][clip]overlay=x={x}:y={y + bar}[framed];"
+        f"[2:v]format=rgba,fade=t=in:st=0.15:d=0.5:alpha=1[caption];"
+        f"[framed][caption]overlay=x=0:y='{rise}*pow(1-min(1,max(0,t-0.15)/0.5),3)':eval=frame[titled];"
+        f"[3:v]format=rgba[bar];"
+        f"[titled][bar]overlay=x='-W+W*t/{duration}':y=H-h:eval=frame,format=yuv420p[v]"
+    )
+    partial = output.with_name(f".{output.name}.partial.mp4")
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+         "-loop", "1", "-framerate", str(FPS), "-t", str(duration), "-i", str(background),
+         "-ss", str(feature.get("start", 0)), "-t", str(duration * speed), "-i", str(source),
+         "-loop", "1", "-framerate", str(FPS), "-t", str(duration), "-i", str(caption),
+         "-f", "lavfi", "-t", str(duration), "-i",
+         f"color=c=0x{GREEN[0]:02x}{GREEN[1]:02x}{GREEN[2]:02x}:s={layout.width}x{progress_h}:r={FPS}",
+         "-filter_complex", graph, "-map", "[v]", "-t", str(duration), "-r", str(FPS), "-an",
+         "-c:v", "libx264", "-crf", "18", "-preset", "medium", str(partial)])
+    partial.replace(output)
+    background.unlink()
+    caption.unlink()
+
+
+def render_outro(spec: dict, layout: Layout, output: Path) -> None:
+    scene = Scene(layout.background(), layout.unit)
+    with Image.open(LOGO) as logo:
+        logo_w = layout.px(560 if layout.square else 620)
+        logo = logo.convert("RGBA").resize((logo_w, round(logo.height * logo_w / logo.width)), Image.LANCZOS)
+    heading = text_layer([spec["heading"]], font(layout.px(46), "medium"), TEXT)
+    pill_font = font(layout.px(34 if layout.square else 38), mono=True)
+    pills = [pill_layer(command, pill_font, layout.unit) for command in spec["install"]]
+    label = text_layer([spec["github_label"]], font(layout.px(28), "light"), MUTED)
+    github = text_layer([spec["github"]], font(layout.px(40), "medium"), GREEN)
+    footnote = text_layer([spec["footnote"]], font(layout.px(24), mono=True), DIM)
+
+    pill_gap = layout.px(22)
+    parts = [(logo, layout.px(64)), (heading, layout.px(30))]
+    parts += [(pill, pill_gap) for pill in pills[:-1]] + [(pills[-1], layout.px(64))]
+    parts += [(label, layout.px(10)), (github, layout.px(56)), (footnote, 0)]
+    total = sum(item.height + gap for item, gap in parts)
+    y = (layout.height - total) // 2
+    for index, (item, gap) in enumerate(parts):
+        scene.add(item, (layout.width - item.width) // 2, y, 0.15 + 0.18 * index, scale=0.92 if index == 0 else 1.0)
+        y += item.height + gap
+    encode_scene(scene, spec["duration"], layout.size, output)
+
+
+# ---- The reel ---------------------------------------------------------------------------------------
+
+
+def segment_plan(spec: dict, layout: Layout, sources: dict[str, str]) -> list[dict]:
+    """Every segment of one format with the hash that names its file."""
+    logo = sha256_file(LOGO)
+    plan = [{"kind": "intro", "spec": spec["intro"], "duration": spec["intro"]["duration"]}]
+    features = spec["features"]
+    for number, feature in enumerate(features, 1):
+        # Each segment keeps only the fields it draws, so its hash ignores the rest.
+        leader = {key: feature[key] for key in ("title", "description", "bullets") if key in feature}
+        clip = {key: feature[key] for key in ("title", "description", "caption", "video", "start", "speed")
+                if key in feature}
+        plan.append({"kind": "leader", "feature": leader, "number": number, "count": len(features),
+                     "duration": spec["leader_duration"]})
+        plan.append({"kind": "clip", "feature": clip, "duration": feature["duration"],
+                     "source": sources[feature["video"]]})
+    plan.append({"kind": "outro", "spec": spec["outro"], "duration": spec["outro"]["duration"]})
+    for index, segment in enumerate(plan):
+        segment["hash"] = hashlib.sha256(json.dumps(
+            {"version": VERSION, "format": layout.name, "logo": logo, **segment}, sort_keys=True,
+        ).encode()).hexdigest()[:16]
+        segment["file"] = f"{index:02d}-{segment['kind']}-{segment['hash']}.mp4"
+    return plan
+
+
+def render_segment(segment: dict, layout: Layout, build: Path) -> None:
+    output = build / segment["file"]
+    kind = segment["kind"]
+    print(f"rendering {layout.name} {segment['file']}")
+    if kind == "intro":
+        render_intro(segment["spec"], layout, output)
+    elif kind == "leader":
+        render_leader(segment["feature"], segment["number"], segment["count"], layout, segment["duration"], output)
+    elif kind == "clip":
+        source = ROOT / segment["feature"]["video"]
+        render_clip(segment["feature"], layout, segment["duration"], source, build, output)
+    else:
+        render_outro(segment["spec"], layout, output)
+
+
+def join(plan: list[dict], build: Path, output: Path) -> None:
+    """Crossfade the segments together, fading in from and out to black."""
+    inputs, chain = [], []
+    for segment in plan:
+        inputs += ["-i", str(build / segment["file"])]
+    last, length = "[0:v]", plan[0]["duration"]
+    for index, segment in enumerate(plan[1:], 1):
+        label = f"[x{index}]"
+        chain.append(f"{last}[{index}:v]xfade=transition=fade:duration={TRANSITION}:offset={length - TRANSITION:.3f}{label}")
+        last, length = label, length + segment["duration"] - TRANSITION
+    chain.append(f"{last}fade=t=in:d=0.5,fade=t=out:st={length - 0.8:.3f}:d=0.8,format=yuv420p[v]")
+    partial = output.with_name(f".{output.name}.partial.mp4")
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *inputs, "-filter_complex", ";".join(chain),
+         "-map", "[v]", "-r", str(FPS), "-c:v", "libx264", "-crf", "20", "-preset", "slow",
+         "-movflags", "+faststart", str(partial)])
+    partial.replace(output)
+    print(f"wrote {output} ({length:.1f}s)")
+
+
+def produce(spec: dict, layout: Layout, sources: dict[str, str], folder: Path, force: bool) -> None:
+    build = folder / "build" / layout.name
+    build.mkdir(parents=True, exist_ok=True)
+    plan = segment_plan(spec, layout, sources)
+    wanted = {segment["file"] for segment in plan}
+    for stale in build.glob("*.mp4"):
+        if stale.name not in wanted:
+            stale.unlink()
+    for segment in plan:
+        if force or not (build / segment["file"]).is_file():
+            render_segment(segment, layout, build)
+    output = folder / "videos" / f"{spec['name']}_{layout.name}.mp4"
+    output.parent.mkdir(exist_ok=True)
+    stamp = output.with_name(f".{output.name}.stamp")
+    fingerprint = hashlib.sha256(json.dumps([[s["file"], s["duration"]] for s in plan]
+                                            + [TRANSITION, VERSION]).encode()).hexdigest()
+    if not force and output.is_file() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
+        print(f"up to date: {output}")
+        return
+    join(plan, build, output)
+    stamp.write_text(fingerprint + "\n")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="produce-reel", description="Cut the tapes' videos into a highlights reel.")
+    parser.add_argument("--spec", type=Path, default=ROOT / "reel" / "reel.json", help="the reel's spec")
+    parser.add_argument("--format", action="append", choices=sorted(FORMATS),
+                        help="only this format (repeatable; default: all)")
+    parser.add_argument("--force", action="store_true", help="render every segment again")
+    args = parser.parse_args(argv)
+    if not shutil.which("ffmpeg"):
+        sys.exit("produce-reel: ffmpeg not found on PATH")
+    spec = json.loads(args.spec.read_text(encoding="utf-8"))
+    sources = {}
+    for feature in spec["features"]:
+        video = ROOT / feature["video"]
+        if not video.is_file():
+            sys.exit(f"produce-reel: {video} doesn't exist; run produce-media on that tape first")
+        sources[feature["video"]] = sha256_file(video)
+    for name in args.format or FORMATS:
+        produce(spec, Layout(name), sources, args.spec.parent, args.force)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
