@@ -59,6 +59,26 @@ Every key is optional. A missing file means all defaults.
 Unknown keys are ignored with a warning. Invalid JSON or a value of the wrong type stops the app with a message
 naming the file, line, and key. Use `--config FILE` to read a different file.
 
+### Nerd Fonts
+
+[Nerd Fonts](https://www.nerdfonts.com/) are regular programming fonts patched with extra symbols and icons. They let terminal apps display graphical-looking indicators as text characters; they don't change how the app works.
+
+Bible TUI can use these icons for marked verses, search and go-to actions, the selected Bible version, clipboard and warning messages, and verses missing from a version in split view. This is purely cosmetic: **a Nerd Font is not required** to read or navigate the Bible.
+
+To enable them:
+
+1. [Download and install a Nerd Font](https://www.nerdfonts.com/font-downloads) on your computer.
+2. Select that font in your **terminal emulator's font settings** (installing it alone does not make your terminal use it).
+3. Set `"nerd_font": true` in Bible TUI's `config.json`, then restart the app.
+
+```json
+{
+  "nerd_font": true
+}
+```
+
+The default is `false`. Bible TUI can't reliably detect which font your terminal uses, so it won't turn this on automatically. If icons appear as empty boxes or strange characters, check that your terminal is actually using a Nerd Font, or switch the setting back to `false` to use the standard Unicode symbols instead.
+
 ### The `yy` copy format
 
 `yy` fills in the `yank_format` template and copies the result. The default, `"{text}"`, copies just the verse
