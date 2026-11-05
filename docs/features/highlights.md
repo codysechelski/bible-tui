@@ -5,10 +5,6 @@ Press `c` to highlight the current verse, or every verse in a selection. Pick on
 
 ![Highlighting verses in different colors](../../tapes/highlight/gifs/feature-highlight-with-keys_small.gif)
 
-> [!NOTE]
-> GIF compression makes the colors in the animation look off. The screenshots below show the real highlight
-> colors.
-
 | | |
 | --- | --- |
 | ![The highlight color picker](../../tapes/highlight/screenshots/showing-highlight-options.png) | ![A highlighted verse](../../tapes/highlight/screenshots/showing-highlighted-verse.png) |
