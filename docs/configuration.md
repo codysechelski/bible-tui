@@ -126,8 +126,11 @@ most once a day, and sends nothing but the request itself (its `User-Agent` name
 answer is kept in `state.json` as `last_update_check` and `latest_version`. If you're offline, the check fails
 quietly and runs again at the next launch.
 
-When a newer version exists, the footer says so. `:update` (also in `ctrl+p`) installs it and restarts bible-tui
-at the same verse:
+When a newer version exists, the footer says so:
+
+![The footer announcing a newer release](../tapes/about-and-update/screenshots/showing-update-notice-thumbnail.png)
+
+`:update` (also in `ctrl+p`) installs it and restarts bible-tui at the same verse:
 
 | Installed with | `:update` runs |
 | --- | --- |

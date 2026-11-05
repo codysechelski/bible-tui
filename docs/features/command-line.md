@@ -38,7 +38,9 @@ and reopens the app at the same verse.
 
 ![The update notice, the About modal, and :update reopening at the same verse](../../tapes/about-and-update/gifs/about-and-update-with-keys_small.gif)
 
-![The About modal with a newer release available](../../tapes/about-and-update/screenshots/showing-about.png)
+| | |
+| --- | --- |
+| ![The footer announcing a newer release](../../tapes/about-and-update/screenshots/showing-update-notice.png) | ![The About modal with a newer release available](../../tapes/about-and-update/screenshots/showing-about.png) |
 
 ![Back at Romans 8:28 after updating](../../tapes/about-and-update/screenshots/showing-updated.png)
 
