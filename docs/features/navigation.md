@@ -22,6 +22,13 @@ so you can browse without pressing Enter.
 `]` and `[` step to the next or previous chapter from anywhere. At the end of a book they continue into the
 next one, in Bible order, even when the book list is sorted alphabetically.
 
-![The books pane in alphabetical order](../../tapes/navigation/screenshots/showing-books-in-alphabetical-order.png)
+## Book order
+
+`a` switches the books pane between Bible order, grouped into the Old and New Testaments, and A to Z. The footer
+shows which one you're in. `book_order` in [config.json](../configuration.md) sets the order it starts in.
+
+| Bible order | A to Z |
+| --- | --- |
+| ![The books pane in Bible order, grouped by testament](../../tapes/navigation/screenshots/showing-books-in-bible-order.png) | ![The books pane in alphabetical order](../../tapes/navigation/screenshots/showing-books-in-alphabetical-order.png) |
 
 Every key is listed in [keybindings.md](../keybindings.md), and in the app under `ctrl+p` or `?`.
