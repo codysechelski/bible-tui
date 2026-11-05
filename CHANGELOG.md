@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v0.10.0 (2026-11-05)
+
+### Documentation
+
+- Explain optional Nerd Font support ([#9](https://github.com/codysechelski/bible-tui/pull/9),
+  [`07800f0`](https://github.com/codysechelski/bible-tui/commit/07800f0bc7d93a7df78b9bfcd916fbe60d414594))
+
+- Rename produce-video to produce-media and record the missing tapes
+  ([#13](https://github.com/codysechelski/bible-tui/pull/13),
+  [`52b60c5`](https://github.com/codysechelski/bible-tui/commit/52b60c57fdd153f24c95b8169cbbd88234fef0f1))
+
+- **logo**: Refresh the logo ([#10](https://github.com/codysechelski/bible-tui/pull/10),
+  [`f7ee5d8`](https://github.com/codysechelski/bible-tui/commit/f7ee5d8f2d664ab8f45d0a26b8a297d7dda3c19c))
+
+### Features
+
+- Add a cross and clock to the top bar ([#11](https://github.com/codysechelski/bible-tui/pull/11),
+  [`cfa3908`](https://github.com/codysechelski/bible-tui/commit/cfa3908d5f66ac11d57d209eb99c5ae5f6c66b83))
+
+- Add a show_clock setting to hide the top bar clock
+  ([#12](https://github.com/codysechelski/bible-tui/pull/12),
+  [`45a3661`](https://github.com/codysechelski/bible-tui/commit/45a3661d061d7359f1921e532476d183e83df42a))
+
+
 ## v0.9.2 (2026-11-04)
 
 ### Bug Fixes
