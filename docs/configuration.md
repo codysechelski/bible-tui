@@ -67,7 +67,13 @@ Bible TUI can use these icons for marked verses, search and go-to actions, the s
 
 To enable them:
 
-1. [Download and install a Nerd Font](https://www.nerdfonts.com/font-downloads) on your computer.
+1. [Download and install a Nerd Font](https://www.nerdfonts.com/font-downloads) on your computer. On macOS, for example, you can install JetBrains Mono Nerd Font with Homebrew:
+
+   ```sh
+   brew install --cask font-jetbrains-mono-nerd-font
+   ```
+
+   Any Nerd Font will work; you don't have to use JetBrains Mono.
 2. Select that font in your **terminal emulator's font settings** (installing it alone does not make your terminal use it).
 3. Set `"nerd_font": true` in Bible TUI's `config.json`, then restart the app.
 
