@@ -5,7 +5,7 @@ an outro card that says how to install bible-tui and where it is on GitHub.
 
 Usage: produce-reel [--force] [--format 16x9|1x1 ...] [--spec reel/reel.json]
 
-What goes in the reel is reel/reel.json: the cards' words, and per feature a video (a path under .tapes/, made
+What goes in the reel is reel/reel.json: the cards' words, and per feature a video (a path under tapes/, made
 by produce-media), where the clip starts, how long it runs, and how much faster it plays. Each format
 (`16x9` at 1920x1080 and `1x1` at 1080x1080) is written to reel/videos/bible-tui-reel_<format>.mp4.
 

@@ -3,7 +3,7 @@
 `yy` copies the current verse. To copy part of a verse or several verses, select with `v` (characters) or `V`
 (whole verses) and press `y`.
 
-![Copying part of a verse, several verses, and a whole verse with and without yank_format, pasted into notes](../../.tapes/yanking/gifs/yanking-with-keys_small.gif)
+![Copying part of a verse, several verses, and a whole verse with and without yank_format, pasted into notes](../../tapes/yanking/gifs/yanking-with-keys_small.gif)
 
 ## Choose what `yy` copies
 
