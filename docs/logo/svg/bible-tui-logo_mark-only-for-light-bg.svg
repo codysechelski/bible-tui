@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="a" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 160 160">
+  <defs>
+    <style>
+      .c {
+        fill: url(#b);
+      }
+
+      .d {
+        fill: #5fd787;
+      }
+    </style>
+    <linearGradient id="b" x1="-341.23" y1="59.24" x2="-341.23" y2="58.24" gradientTransform="translate(54676.9023 9478.9074) scale(160 -160)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2b2e3f"/>
+      <stop offset="1" stop-color="#191b26"/>
+    </linearGradient>
+  </defs>
+  <rect class="c" width="160" height="160" rx="35" ry="35"/>
+  <polygon class="d" points="107.31 57.56 90.59 57.56 90.59 40.98 69.41 40.98 69.41 57.56 52.69 57.56 52.69 78.75 69.41 78.75 69.41 119.02 90.59 119.02 90.59 78.75 107.31 78.75 107.31 57.56"/>
+</svg>
