@@ -3,7 +3,7 @@
 Every action has a key that works without knowing Vim: arrows, Tab, Page Up/Down, Home/End, Enter, Esc. Vim and
 Neovim users get the usual alternatives too. `ctrl+p` (or `?`) lists them all inside the app.
 
-![Opening the commands list with ? and scrolling through it](../.tapes/commands/gifs/commands-with-keys_small.gif)
+![Opening the commands list with ? and scrolling through it](../tapes/commands/gifs/commands-with-keys_small.gif)
 
 ## Navigation
 

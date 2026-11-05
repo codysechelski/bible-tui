@@ -15,7 +15,7 @@
 
 A fast, dependency-free terminal Bible reader with Vim-style keys.
 
-![A tour of bible-tui: moving around, going to a verse, fuzzy-finding, marking, highlighting, and comparing two versions](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/overview/gifs/overview_small.gif)
+![A tour of bible-tui: moving around, going to a verse, fuzzy-finding, marking, highlighting, and comparing two versions](https://raw.githubusercontent.com/codysechelski/bible-tui/main/tapes/overview/gifs/overview_small.gif)
 
 - **[Read and navigate](https://github.com/codysechelski/bible-tui/blob/main/docs/features/navigation.md)** with arrows or Vim keys,
   [jump to `John 3:16`](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) with autocomplete, and use a Vim-style
@@ -30,9 +30,9 @@ A fast, dependency-free terminal Bible reader with Vim-style keys.
 
 | | |
 | --- | --- |
-| [![Highlight color picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/highlight/screenshots/showing-highlight-options-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) | [![Fuzzy-finding verses across the whole Bible](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/fuzzy-finding/screenshots/showing-fuzzy-find-multi-word-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/fuzzy-find.md) |
+| [![Highlight color picker](https://raw.githubusercontent.com/codysechelski/bible-tui/main/tapes/highlight/screenshots/showing-highlight-options-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) | [![Fuzzy-finding verses across the whole Bible](https://raw.githubusercontent.com/codysechelski/bible-tui/main/tapes/fuzzy-finding/screenshots/showing-fuzzy-find-multi-word-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/fuzzy-find.md) |
 | [Highlight verses](https://github.com/codysechelski/bible-tui/blob/main/docs/features/highlights.md) in six colors | [Fuzzy-find](https://github.com/codysechelski/bible-tui/blob/main/docs/features/fuzzy-find.md) across the whole Bible |
-| [![The Go To Reference box](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/go-to-reference/screenshots/showing-go-to-reference-modal-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) | [![Two versions side by side](https://raw.githubusercontent.com/codysechelski/bible-tui/main/.tapes/splits/screenshots/showing-vertical-split-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md) |
+| [![The Go To Reference box](https://raw.githubusercontent.com/codysechelski/bible-tui/main/tapes/go-to-reference/screenshots/showing-go-to-reference-modal-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) | [![Two versions side by side](https://raw.githubusercontent.com/codysechelski/bible-tui/main/tapes/splits/screenshots/showing-vertical-split-thumbnail.png)](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md) |
 | [Go to a reference](https://github.com/codysechelski/bible-tui/blob/main/docs/features/go-to-reference.md) with autocomplete | [Compare two versions](https://github.com/codysechelski/bible-tui/blob/main/docs/features/split-view.md) side by side |
 
 **[See all features →](https://github.com/codysechelski/bible-tui/blob/main/docs/features/index.md)** Each one has a short animation.

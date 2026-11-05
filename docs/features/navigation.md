@@ -4,7 +4,7 @@ The screen has three panes: books, chapters, and the text. Move through them wit
 Up/Down, and Home/End, or use Vim keys if you know them. Highlighting a book shows its first chapter right away,
 so you can browse without pressing Enter.
 
-![Moving through books, chapters, and verses with arrows or Vim motions, then stepping through chapters with the bracket keys](../../.tapes/navigation/gifs/navigation-with-keys_small.gif)
+![Moving through books, chapters, and verses with arrows or Vim motions, then stepping through chapters with the bracket keys](../../tapes/navigation/gifs/navigation-with-keys_small.gif)
 
 | Action | Keys | Vim-style |
 | --- | --- | --- |
@@ -22,6 +22,6 @@ so you can browse without pressing Enter.
 `]` and `[` step to the next or previous chapter from anywhere. At the end of a book they continue into the
 next one, in Bible order, even when the book list is sorted alphabetically.
 
-![The books pane in alphabetical order](../../.tapes/navigation/screenshots/showing-books-in-alphabetical-order.png)
+![The books pane in alphabetical order](../../tapes/navigation/screenshots/showing-books-in-alphabetical-order.png)
 
 Every key is listed in [keybindings.md](../keybindings.md), and in the app under `ctrl+p` or `?`.

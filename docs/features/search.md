@@ -3,7 +3,7 @@
 `/` searches the pane you're in, Vim-style. In the books pane it finds book names. In the text pane it finds
 words in the current chapter. Matches are highlighted as you type, with a count in the footer.
 
-![Searching book names and chapter text with /](../../.tapes/searching/gifs/searching-with-keys_small.gif)
+![Searching book names and chapter text with /](../../tapes/searching/gifs/searching-with-keys_small.gif)
 
 | Action | Keys |
 | --- | --- |
@@ -17,7 +17,7 @@ chapters pane opens that chapter and searches its text.
 
 | | |
 | --- | --- |
-| ![Searching book names](../../.tapes/searching/screenshots/showing-search-in-books.png) | ![Searching the chapter text](../../.tapes/searching/screenshots/showing-search-in-verses.png) |
+| ![Searching book names](../../tapes/searching/screenshots/showing-search-in-books.png) | ![Searching the chapter text](../../tapes/searching/screenshots/showing-search-in-verses.png) |
 | In the books pane | In the text pane |
 
 To search the whole Bible at once, use the [fuzzy finder](fuzzy-find.md).
