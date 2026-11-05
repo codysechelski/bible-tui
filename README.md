@@ -121,6 +121,8 @@ You can still read any version you have the rights to use:
 }
 ```
 
+**Optional Nerd Font support:** Bible TUI can display extra icons when your terminal uses a Nerd Font. It's not required, and the default display works without one. See [Nerd Fonts and how to enable them](docs/configuration.md#nerd-fonts).
+
 Every setting is described in [docs/configuration.md](https://github.com/codysechelski/bible-tui/blob/main/docs/configuration.md).
 
 ## Development
