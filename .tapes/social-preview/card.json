@@ -1,0 +1,15 @@
+{
+  "screenshot": "screenshots/terminal.png",
+  "output": "../../docs/screenshots/social-preview.png",
+  "window_title": "bible-tui",
+  "title": "bible-tui",
+  "tagline": "Read the Bible in your terminal.",
+  "bullets": [
+    "Any version, side by side",
+    "Marks and color highlights",
+    "Fuzzy search the whole Bible",
+    "Vim keys, or just the arrows",
+    "Pure Python, no dependencies"
+  ],
+  "footnote": "KJV and ASV included"
+}

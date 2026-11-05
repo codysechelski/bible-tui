@@ -3,7 +3,9 @@
 Everything bible-tui keeps is a readable JSON file in one folder, `~/.config/bible-tui` by default. Back it up,
 sync it, or keep it in your dotfiles.
 
-![The app folder with config.json, highlights.json, marks.json, and state.json](../screenshots/images/showing-saved-file-structure.png)
+![Marking and highlighting verses, then looking at the files they're saved in](../../.tapes/your-files/gifs/your-files-with-keys_small.gif)
+
+![The app folder with config.json, highlights.json, marks.json, and state.json](../../.tapes/your-files/screenshots/showing-saved-file-structure.png)
 
 - **`config.json`** holds your settings. You write it and the app never rewrites it, so your formatting is kept
   and you can symlink it from a dotfiles repo.
@@ -11,6 +13,6 @@ sync it, or keep it in your dotfiles.
   they work in every version.
 - **`state.json`** remembers small things, such as the last version you used.
 
-![A config.json kept in a dotfiles repo](../screenshots/images/stowable-config-file.png)
+![A config.json kept in a dotfiles repo](../../.tapes/your-files/screenshots/stowable-config-file.png)
 
 Every setting is described in [configuration.md](../configuration.md).

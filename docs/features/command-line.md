@@ -22,4 +22,24 @@ Commands can be shortened like in Vim (`:q`, `:vs`).
 | `:update` | Install a newer release and restart at the same verse |
 | `:q` | Quit |
 
+### Proverb of the day
+
+`:potd` opens the chapter of Proverbs for today's date. It's also in the `ctrl+p` commands list.
+
+![Going to the proverb of the day with :potd and from the commands list](../../.tapes/proverb-of-the-day/gifs/proverb-of-the-day-with-keys_small.gif)
+
+![Proverbs 5 opened on the 5th of the month](../../.tapes/proverb-of-the-day/screenshots/showing-proverb-of-the-day.png)
+
+### About and updates
+
+When a newer release is out, the footer says so. `:about` shows the version you're running, the latest
+release, and the project link (`o` opens it, `y` copies it, and `u` updates). `:update` installs the new release
+and reopens the app at the same verse.
+
+![The update notice, the About modal, and :update reopening at the same verse](../../.tapes/about-and-update/gifs/about-and-update-with-keys_small.gif)
+
+![The About modal with a newer release available](../../.tapes/about-and-update/screenshots/showing-about.png)
+
+![Back at Romans 8:28 after updating](../../.tapes/about-and-update/screenshots/showing-updated.png)
+
 The full list is in [keybindings.md](../keybindings.md#the--command-line).

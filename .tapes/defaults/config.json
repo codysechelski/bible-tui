@@ -4,6 +4,7 @@
   ],
   "book_order": "bible",
   "nerd_font": true,
+  "show_clock": false,
   "remember_split": false,
   "remember_position": false,
   "check_for_updates": true

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Starts a shell in a throwaway HOME, for tapes that show files or do things the real home shouldn't see.
+#
+#   ../sandbox NAME [HOOK]
+#
+# The sandbox gets a copy of the clean app home setup.tape made (in ~/.config/bible-tui), a private
+# clipboard (pbcopy/pbpaste write a file), an `open` that does nothing, `bible-tui` linked to this working
+# copy, no pagers, and a plain prompt that shows the folder. HOOK, if given, runs next with HOME set to the sandbox, for
+# the tape's own setup. Then the shell starts there; `exit` goes back to the tape's shell, where
+# teardown.tape restores the real app home.
+set -euo pipefail
+
+name="${1:?usage: sandbox NAME [HOOK]}"
+hook="${2:-}"
+[[ -z "$hook" ]] || hook="$(cd "$(dirname "$hook")" && pwd)/$(basename "$hook")"
+sandbox="$(mktemp -d -t "bible-tui-$name")"
+mkdir -p "$sandbox/.config/bible-tui" "$sandbox/bin"
+
+# The app home, found the way bible-tui finds it. setup.tape has already reset it to the clean defaults.
+if [[ -n "${BIBLE_TUI_HOME:-}" ]]; then
+  app="$BIBLE_TUI_HOME"
+elif [[ -d "$HOME/.bible-tui" ]]; then
+  app="$HOME/.bible-tui"
+else
+  app="${XDG_CONFIG_HOME:-$HOME/.config}/bible-tui"
+fi
+cp "$app/config.json" "$app/state.json" "$sandbox/.config/bible-tui/"
+
+cat > "$sandbox/bin/pbcopy" <<STUB
+#!/bin/sh
+cat > "$sandbox/.clipboard"
+STUB
+cat > "$sandbox/bin/pbpaste" <<STUB
+#!/bin/sh
+cat "$sandbox/.clipboard" 2>/dev/null
+STUB
+cat > "$sandbox/bin/open" <<'STUB'
+#!/bin/sh
+exit 0
+STUB
+chmod +x "$sandbox/bin/"*
+# produce-media names this working copy's launcher in BIBLE_TUI_TAPE_BIN.
+if [[ -n "${BIBLE_TUI_TAPE_BIN:-}" ]]; then
+  ln -s "$BIBLE_TUI_TAPE_BIN/bible-tui" "$sandbox/bin/bible-tui"
+fi
+
+cat > "$sandbox/.zshrc" <<'RC'
+PROMPT='%F{blue}%~%f %F{magenta}❯%f '
+path=("$HOME/bin" $path)
+export PAGER=cat GIT_PAGER=cat  # a pager would swallow the tape's next keys
+RC
+
+# Point every config/data location at the sandbox, so nothing reads or writes the real ones.
+unset BIBLE_TUI_HOME ZDOTDIR XDG_DATA_DIRS XDG_CONFIG_DIRS
+export HOME="$sandbox" PATH="$sandbox/bin:$PATH" XDG_CONFIG_HOME="$sandbox/.config" \
+  XDG_DATA_HOME="$sandbox/.local/share" XDG_STATE_HOME="$sandbox/.local/state" XDG_CACHE_HOME="$sandbox/.cache"
+cd "$sandbox"
+[[ -z "$hook" ]] || "$hook"
+exec zsh -i

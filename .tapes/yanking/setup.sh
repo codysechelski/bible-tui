@@ -33,6 +33,11 @@ cat > "$sandbox/bin/pbpaste" <<EOF
 cat "$sandbox/.clipboard" 2>/dev/null
 EOF
 chmod +x "$sandbox/bin/pbcopy" "$sandbox/bin/pbpaste"
+# produce-media names this working copy's launcher in BIBLE_TUI_TAPE_BIN; tmux's login shell would put the
+# installed bible-tui ahead of it on the PATH, so link it into bin/ (which .zshrc puts first).
+if [[ -n "${BIBLE_TUI_TAPE_BIN:-}" ]]; then
+  ln -s "$BIBLE_TUI_TAPE_BIN/bible-tui" "$sandbox/bin/bible-tui"
+fi
 
 # Login shells run macOS's path_helper, which moves the system folders back in front, so put bin/ first
 # again here.
