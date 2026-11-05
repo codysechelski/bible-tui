@@ -84,6 +84,16 @@ class MarkStoreTest(unittest.TestCase):
         with self.assertRaises(ConfigError):
             load_settings(config)
 
+    def test_show_clock_setting(self) -> None:
+        config = Path(tempfile.mkdtemp()) / "config.json"
+        config.write_text("{}", encoding="utf-8")
+        self.assertTrue(load_settings(config).show_clock)
+        config.write_text('{"show_clock": false}', encoding="utf-8")
+        self.assertFalse(load_settings(config).show_clock)
+        config.write_text('{"show_clock": "no"}', encoding="utf-8")
+        with self.assertRaises(ConfigError):
+            load_settings(config)
+
 
 class TuiMarkTest(unittest.TestCase):
     def setUp(self) -> None:

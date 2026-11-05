@@ -132,8 +132,9 @@ No linter or formatter is installed.
   around at either end, and a group's heading scrolls into view with its first command. The footer prompt keeps
   `ctrl+p` white and `commands` in the dim footer gray.
 - Top bar (`draw_top_bar`): a green cross (`glyphs["title"]`) and `Bible TUI` on the left, the date and time
-  on the right (`locale_clock_format`: the locale's weekday, date, and time to the minute). The run loop's
-  `getch` timeout wakes at each new minute to redraw the clock. The version and book order are in the footer,
+  on the right (`locale_clock_format`: the locale's weekday, date, and time to the minute) unless the
+  `show_clock` setting is false. The run loop's `getch` timeout wakes at each new minute to redraw the clock,
+  and doesn't when it's hidden. The version and book order are in the footer,
   not the top bar.
 - Footer layout (`draw_status`), Vim-style: the mode (`-- VISUAL --`) on the left. The place info
   (book order, version, reference, focus) is right-aligned just before the `ctrl+p` hint, and the timed message sits
