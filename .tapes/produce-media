@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Record a VHS tape and burn a keycaster-style overlay of its keystrokes into the video, in one step.
+"""Record VHS tapes into the docs' media: videos with a keycaster-style keystroke overlay, GIFs, screenshots
+and their thumbnails, and composed images such as the GitHub social preview.
 
-Usage: produce-video [options] TAPE...   (.tape files, or folders containing exactly one each)
+Usage: produce-media [options] TAPE...   (.tape files, or folders containing exactly one each)
 
 Several tapes are processed one after another. A tape that fails is reported and the rest still run.
 `-a`/`--all` processes every tape folder next to this script and implies `--force`, for re-recording
 everything after the app's look changes.
+
+Tapes record this working copy, not whatever bible-tui is installed: `bible-tui` in a tape runs the repo's
+`./bible-tui` wrapper, which is put first on the PATH vhs runs with (and named in `$BIBLE_TUI_TAPE_BIN`, for
+sandboxes whose login shells reorder the PATH). The clean app home from setup.tape (`defaults/config.json`)
+turns the top bar's clock off, so re-recording doesn't put a new time into every frame.
 
 Each tape lives in its own folder. Before recording, `screenshots/`, `videos/` and `gifs/` are created in that
 folder; `vhs` runs inside it, so the tape's relative `Output` and `Screenshot` paths land there.
@@ -21,6 +27,10 @@ text matters more than compression artifacts, so the GIFs trade colors and frame
 `--gifs-only` re-exports just the GIFs from the videos already there. Last, every image in `screenshots/` gets a
 thumbnail beside it named `<name>-thumbnail.<ext>`. Running again with unchanged inputs does nothing;
 `--force` re-renders.
+
+A tape with no `Output ... .mp4` line only takes screenshots: there's no video, GIF, or thumbnail. A tape folder
+with a `card.json` gets a card composed from one of its screenshots (see CARD_DEFAULTS), written wherever the
+card says; the social-preview tape makes `docs/screenshots/social-preview.png` this way.
 
 Overlays are asked for with directive comments, which VHS ignores:
 
@@ -57,11 +67,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
 except ImportError:
-    sys.exit("produce-video: Pillow is required (python3 -m pip install pillow)")
+    sys.exit("produce-media: Pillow is required (python3 -m pip install pillow)")
 
-VERSION = "3"  # bump to invalidate up-to-date checks when the rendering changes
+VERSION = "4"  # bump to invalidate up-to-date checks when the rendering changes
 DEFAULT_TYPING_SPEED = 0.05  # VHS default TypingSpeed (50ms)
 
 KEY_LABELS = {
@@ -91,6 +101,12 @@ FONT_CANDIDATES = [
     ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 0),
     ("/usr/share/fonts/TTF/DejaVuSansMono-Bold.ttf", 0),
 ]
+MONO_FONT_CANDIDATES = [  # regular weight, for small labels on cards
+    ("/System/Library/Fonts/Menlo.ttc", 0),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 0),
+    ("/usr/share/fonts/TTF/DejaVuSansMono.ttf", 0),
+    *FONT_CANDIDATES,
+]
 TEXT_FONT_CANDIDATES = [  # proportional, for footnotes
     ("/System/Library/Fonts/HelveticaNeue.ttc", 0),
     ("/System/Library/Fonts/Helvetica.ttc", 0),
@@ -100,6 +116,8 @@ TEXT_FONT_CANDIDATES = [  # proportional, for footnotes
 ]
 
 ROOT = Path(__file__).resolve().parent
+REPO = ROOT.parent
+APP_WRAPPER = REPO / "bible-tui"  # the working copy's launcher, which tapes run as `bible-tui`
 APP_HOME = ROOT / "app-home"  # backs up / restores the real app home
 OVERLAY_TEXTS = ROOT / "overlays"  # named overlay texts: `#@ footnote NAME` reads overlays/NAME.txt
 
@@ -330,7 +348,7 @@ def load_font(path: str | None, size: int, candidates=FONT_CANDIDATES):
     for candidate, index in candidates:
         if os.path.exists(candidate):
             return ImageFont.truetype(candidate, size, index=index)
-    sys.exit("produce-video: no font found; pass --font PATH")
+    sys.exit("produce-media: no font found; pass --font PATH")
 
 
 class Renderer:
@@ -462,22 +480,33 @@ def find_tape(path: Path) -> Path:
         tapes = sorted(path.glob("*.tape"))
         if len(tapes) != 1:
             found = ", ".join(t.name for t in tapes) or "none"
-            sys.exit(f"produce-video: expected one .tape file in {path}, found {found}")
+            sys.exit(f"produce-media: expected one .tape file in {path}, found {found}")
         return tapes[0].resolve()
     if path.is_file():
         return path.resolve()
-    sys.exit(f"produce-video: no such tape or folder: {path}")
+    sys.exit(f"produce-media: no such tape or folder: {path}")
 
 
 OUTPUT_FOLDERS = ("screenshots", "videos", "gifs")
 
 
-def video_path(tape: Path, outputs: list[str]) -> Path:
-    """The tape's .mp4 Output, resolved against the tape's folder (where vhs runs)."""
+def video_path(tape: Path, outputs: list[str]) -> Path | None:
+    """The tape's .mp4 Output, resolved against the tape's folder (where vhs runs); None for a tape that only
+    takes screenshots."""
     mp4s = [o for o in outputs if o.lower().endswith(".mp4")]
     if not mp4s:
-        sys.exit(f"produce-video: {tape} has no `Output ... .mp4` line")
+        return None
     return (tape.parent / Path(mp4s[0]).expanduser()).resolve()
+
+
+def record_stills(tape: Path, fingerprint: str, force: bool, tape_bin: Path) -> None:
+    """Run a screenshots-only tape, unless its screenshots were already taken from this exact tape."""
+    stamp = tape.parent / "screenshots" / ".stills.recorded"
+    if not force and stamp.is_file() and stamp.read_text().strip() == fingerprint:
+        print(f"up to date: {tape.parent / 'screenshots'} (taken from this tape)")
+        return
+    run_vhs(tape, tape_bin)
+    stamp.write_text(fingerprint + "\n")
 
 
 def raw_path(video: Path) -> Path:
@@ -485,7 +514,24 @@ def raw_path(video: Path) -> Path:
     return video.parent / "raw" / video.name
 
 
-def record(tape: Path, video: Path, fingerprint: str, force: bool) -> None:
+def run_vhs(tape: Path, tape_bin: Path) -> None:
+    """Run vhs on the tape, with this working copy's `bible-tui` first on the PATH."""
+    if not shutil.which("vhs"):
+        sys.exit("produce-media: vhs not found on PATH")
+    env = {**os.environ, "PATH": f"{tape_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+           "BIBLE_TUI_TAPE_BIN": str(tape_bin)}
+    print(f"$ vhs {shlex.quote(tape.name)}  (in {tape.parent})")
+    try:
+        subprocess.run(["vhs", tape.name], cwd=tape.parent, env=env, check=True)
+    except subprocess.CalledProcessError as error:
+        sys.exit(f"produce-media: vhs failed ({error.returncode})")
+    finally:
+        # teardown.tape normally restores the real app home; this covers a tape that failed or was stopped
+        # before reaching it. It does nothing when there's no backup.
+        subprocess.run([str(APP_HOME), "restore"])
+
+
+def record(tape: Path, video: Path, fingerprint: str, force: bool, tape_bin: Path) -> None:
     """Run vhs unless the video was already recorded from this exact tape (and the tapes it sources), then
     move the recording from the tape's Output path to raw_path(video)."""
     raw = raw_path(video)
@@ -498,19 +544,9 @@ def record(tape: Path, video: Path, fingerprint: str, force: bool) -> None:
                                                                                        raw_state()]:
         print(f"up to date: {raw} (recorded from this tape)")
         return
-    if not shutil.which("vhs"):
-        sys.exit("produce-video: vhs not found on PATH")
-    print(f"$ vhs {shlex.quote(tape.name)}  (in {tape.parent})")
-    try:
-        subprocess.run(["vhs", tape.name], cwd=tape.parent, check=True)
-    except subprocess.CalledProcessError as error:
-        sys.exit(f"produce-video: vhs failed ({error.returncode})")
-    finally:
-        # teardown.tape normally restores the real app home; this covers a tape that failed or was stopped
-        # before reaching it. It does nothing when there's no backup.
-        subprocess.run([str(APP_HOME), "restore"])
+    run_vhs(tape, tape_bin)
     if not video.is_file():
-        sys.exit(f"produce-video: vhs finished but {video} doesn't exist")
+        sys.exit(f"produce-media: vhs finished but {video} doesn't exist")
     raw.parent.mkdir(exist_ok=True)
     video.replace(raw)
     stamp.write_text(f"{fingerprint} {raw_state()}\n")
@@ -632,7 +668,7 @@ def compose(video: Path, output: Path, layers: list[tuple[list, object]], size: 
             subprocess.run(command, check=True)
         except subprocess.CalledProcessError as error:
             partial.unlink(missing_ok=True)
-            sys.exit(f"produce-video: ffmpeg failed ({error.returncode})")
+            sys.exit(f"produce-media: ffmpeg failed ({error.returncode})")
         partial.replace(output)
 
 
@@ -662,7 +698,7 @@ def export_gif(source: Path, gif: Path, fps: float, colors: int, scale: str | No
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as error:
         partial.unlink(missing_ok=True)
-        sys.exit(f"produce-video: ffmpeg failed making {gif.name} ({error.returncode})")
+        sys.exit(f"produce-media: ffmpeg failed making {gif.name} ({error.returncode})")
     partial.replace(gif)
     stamp.write_text(fingerprint + "\n")
     print(f"wrote {gif} ({gif.stat().st_size / 1_000_000:.1f} MB)")
@@ -705,9 +741,124 @@ def make_thumbnails(folder: Path, width: int, force: bool) -> None:
         print(f"wrote {thumb}")
 
 
+# ---- Cards ----------------------------------------------------------------------------------------
+
+# card.json in a tape folder overrides these. Paths are relative to the tape folder. Sizes and positions below
+# are for the default 1280x640 (GitHub's social preview size) and scale with "size".
+CARD_DEFAULTS = {
+    "size": [1280, 640],
+    "screenshot": "screenshots/terminal.png",  # what goes in the terminal window
+    "output": "card.png",
+    "window_title": "",
+    "title": "",
+    "tagline": "",
+    "bullets": [],
+    "footnote": "",
+}
+CARD_TEXT = (240, 240, 245)
+CARD_MUTED = (150, 160, 182)
+CARD_DIM = (112, 120, 140)
+CARD_GREEN = (80, 200, 120)
+CARD_WINDOW = (40, 42, 54)  # Dracula's background, the tapes' theme
+CARD_BAR = (33, 34, 44)
+
+
+def card_background(size: tuple[int, int]) -> Image.Image:
+    """A dark diagonal gradient with a soft green glow in the lower right."""
+    width, height = size
+    small = Image.new("RGB", (64, 32))
+    for y in range(32):
+        for x in range(64):
+            t = (x / 63 + y / 31) / 2
+            glow = max(0.0, 1 - ((x - 52) ** 2 / 500 + (y - 30) ** 2 / 150)) * 0.35
+            small.putpixel((x, y), (round(30 - 16 * t + 10 * glow), round(34 - 17 * t + 26 * glow),
+                                    round(48 - 22 * t + 18 * glow)))
+    return small.resize(size, Image.BICUBIC)
+
+
+def make_card(folder: Path, force: bool) -> None:
+    """Compose card.json's card: title, tagline, and bullets on the left, a screenshot in a terminal window
+    on the right. Does nothing for a folder without card.json."""
+    spec_path = folder / "card.json"
+    if not spec_path.is_file():
+        return
+    spec = {**CARD_DEFAULTS, **json.loads(spec_path.read_text(encoding="utf-8"))}
+    shot_path = folder / spec["screenshot"]
+    output = (folder / spec["output"]).resolve()
+    if not shot_path.is_file():
+        sys.exit(f"produce-media: {shot_path} doesn't exist; record {folder.name} first")
+    fingerprint = hashlib.sha256(json.dumps({
+        "version": VERSION, "spec": spec, "shot": [shot_path.stat().st_size, shot_path.stat().st_mtime_ns],
+    }, sort_keys=True).encode()).hexdigest()
+    stamp = folder / ".card.stamp"
+    if not force and output.is_file() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
+        print(f"up to date: {output}")
+        return
+
+    width, height = spec["size"]
+    unit = width / 1280
+
+    def px(value: float) -> int:
+        return round(value * unit)
+
+    card = card_background((width, height)).convert("RGBA")
+    draw = ImageDraw.Draw(card)
+
+    # Left: the words.
+    left = px(64)
+    title_font = load_font(None, px(72))
+    draw.text((left, px(136)), spec["title"], font=title_font, fill=CARD_TEXT)
+    draw.text((left, px(224)), spec["tagline"], font=load_font(None, px(26), TEXT_FONT_CANDIDATES), fill=CARD_MUTED)
+    bullet_font = load_font(None, px(23), TEXT_FONT_CANDIDATES)
+    y = px(296)
+    for bullet in spec["bullets"]:
+        box = px(10)
+        top = y + px(8)
+        draw.rounded_rectangle((left, top, left + box, top + box), px(2), fill=CARD_GREEN)
+        draw.text((left + px(24), y), bullet, font=bullet_font, fill=CARD_TEXT)
+        y += px(40)
+    if spec["footnote"]:
+        draw.text((left, px(532)), spec["footnote"], font=load_font(None, px(17), MONO_FONT_CANDIDATES),
+                  fill=CARD_DIM)
+
+    # Right: the screenshot in a terminal window with a soft shadow.
+    win_x, win_y, win_w, win_h = px(560), px(80), px(680), px(480)
+    bar_h, radius = px(30), px(12)
+    shadow = Image.new("RGBA", card.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle((win_x, win_y + px(14), win_x + win_w, win_y + win_h + px(14)),
+                                             radius, fill=(0, 0, 0, 150))
+    card.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(px(22))))
+
+    window = Image.new("RGBA", (win_w, win_h), (*CARD_WINDOW, 255))
+    window_draw = ImageDraw.Draw(window)
+    window_draw.rectangle((0, 0, win_w, bar_h), fill=(*CARD_BAR, 255))
+    for index, color in enumerate(((255, 95, 86), (255, 189, 46), (39, 201, 63))):
+        cx, r = px(20) + index * px(20), px(6)
+        window_draw.ellipse((cx - r, bar_h // 2 - r, cx + r, bar_h // 2 + r), fill=color)
+    if spec["window_title"]:
+        label_font = load_font(None, px(14), MONO_FONT_CANDIDATES)
+        label_w = label_font.getlength(spec["window_title"])
+        window_draw.text(((win_w - label_w) / 2, bar_h / 2), spec["window_title"], font=label_font,
+                         fill=CARD_DIM, anchor="lm")
+    with Image.open(shot_path) as shot:
+        scale = win_w / shot.width
+        shot = shot.convert("RGBA").resize((win_w, round(shot.height * scale)), Image.LANCZOS)
+        window.alpha_composite(shot.crop((0, 0, win_w, min(shot.height, win_h - bar_h))), (0, bar_h))
+    mask = Image.new("L", (win_w, win_h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, win_w - 1, win_h - 1), radius, fill=255)
+    card.paste(window, (win_x, win_y), mask)
+    ImageDraw.Draw(card).rounded_rectangle((win_x, win_y, win_x + win_w - 1, win_y + win_h - 1), radius,
+                                           outline=(70, 74, 92), width=max(1, px(1)))
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    card.convert("RGB").save(output, optimize=True)
+    stamp.write_text(fingerprint + "\n")
+    print(f"wrote {output}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="produce-video",
+        prog="produce-media",
         description="Record a VHS tape, then burn its overlays and a keycaster-style keystroke overlay"
                     " into its .mp4 output and export GIFs.",
     )
@@ -759,7 +910,7 @@ def main(argv: list[str] | None = None) -> int:
         root = Path(__file__).resolve().parent
         args.tapes = sorted(d for d in root.iterdir() if d.is_dir() and any(d.glob("*.tape")))
         if not args.tapes:
-            sys.exit(f"produce-video: no tape folders in {root}")
+            sys.exit(f"produce-media: no tape folders in {root}")
         args.force = True
     elif not args.tapes:
         parser.error("give at least one tape or folder, or --all")
@@ -770,7 +921,15 @@ def main(argv: list[str] | None = None) -> int:
 
     for tool in ("ffmpeg", "ffprobe"):
         if not shutil.which(tool):
-            sys.exit(f"produce-video: {tool} not found on PATH")
+            sys.exit(f"produce-media: {tool} not found on PATH")
+
+    # `bible-tui` for the tapes, first on vhs's PATH: a script that runs this working copy's launcher (not a
+    # symlink, since the launcher finds the package from its own path).
+    bin_dir = tempfile.TemporaryDirectory(prefix="produce-media-bin-")
+    args.tape_bin = Path(bin_dir.name)
+    shim = args.tape_bin / "bible-tui"
+    shim.write_text(f'#!/bin/sh\nexec {shlex.quote(str(APP_WRAPPER))} "$@"\n')
+    shim.chmod(0o755)
 
     failed = []
     for index, tape_arg in enumerate(args.tapes):
@@ -780,11 +939,12 @@ def main(argv: list[str] | None = None) -> int:
             produce(tape_arg, args)
         except SystemExit as error:  # per-tape failures use sys.exit; keep going with the next tape
             if error.code not in (None, 0):
-                print(error.code if isinstance(error.code, str) else f"produce-video: {tape_arg} failed",
+                print(error.code if isinstance(error.code, str) else f"produce-media: {tape_arg} failed",
                       file=sys.stderr)
                 failed.append(str(tape_arg))
+    bin_dir.cleanup()
     if failed:
-        print(f"produce-video: {len(failed)} of {len(args.tapes)} failed: {', '.join(failed)}", file=sys.stderr)
+        print(f"produce-media: {len(failed)} of {len(args.tapes)} failed: {', '.join(failed)}", file=sys.stderr)
         return 1
     return 0
 
@@ -799,12 +959,21 @@ def produce(tape_arg: Path, args: argparse.Namespace) -> None:
     for warning in timeline.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     video = video_path(tape, timeline.outputs)
+    if video is None:
+        if args.gifs_only or args.dry_run:
+            print(f"skipped: {tape} only takes screenshots")
+            return
+        (folder / "screenshots").mkdir(exist_ok=True)
+        if not args.skip_record:
+            record_stills(tape, tape_hash, args.force, args.tape_bin)
+        make_card(folder, args.force)
+        return
     raw = raw_path(video)
     output = (args.output or folder / "videos" / f"{video.stem}-with-keys.mp4").resolve()
     if args.gifs_only:
         for source in (video, output):
             if not source.is_file():
-                sys.exit(f"produce-video: {source} doesn't exist; run without --gifs-only")
+                sys.exit(f"produce-media: {source} doesn't exist; run without --gifs-only")
         export_gifs(folder, (video, output), *probe(video)[:2], args)
         return
     if not args.dry_run:
@@ -812,13 +981,13 @@ def produce(tape_arg: Path, args: argparse.Namespace) -> None:
             (folder / name).mkdir(exist_ok=True)
         if args.skip_record:
             if not raw.is_file():
-                sys.exit(f"produce-video: {raw} doesn't exist; run without --skip-record")
+                sys.exit(f"produce-media: {raw} doesn't exist; run without --skip-record")
         else:
-            record(tape, video, tape_hash, args.force)
+            record(tape, video, tape_hash, args.force, args.tape_bin)
     elif not raw.is_file():
-        sys.exit(f"produce-video: {raw} doesn't exist yet; --dry-run needs a recorded video")
+        sys.exit(f"produce-media: {raw} doesn't exist yet; --dry-run needs a recorded video")
     if output in (video, raw):
-        sys.exit("produce-video: -o must differ from the tape's videos")
+        sys.exit("produce-media: -o must differ from the tape's videos")
     width, height, duration = probe(raw)
 
     predicted = timeline.duration
@@ -871,7 +1040,7 @@ def produce(tape_arg: Path, args: argparse.Namespace) -> None:
 
     # Idempotence: skip an output made from these exact inputs and settings.
     settings = {k: str(v) for k, v in vars(args).items()
-                if k not in {"tapes", "force", "dry_run", "skip_record", "output"}
+                if k not in {"tapes", "force", "dry_run", "skip_record", "output", "tape_bin"}
                 and not k.startswith(("gif", "no_gif", "thumbnail"))}
     overlays_used = [[o.kind, o.start, o.end, o.lines] for o in timeline.overlays]
     for target, target_layers in ((video, layers), (output, [*layers, key_layer])):
@@ -892,6 +1061,7 @@ def produce(tape_arg: Path, args: argparse.Namespace) -> None:
 
     if args.thumbnail_width:
         make_thumbnails(folder / "screenshots", args.thumbnail_width, args.force)
+    make_card(folder, args.force)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@
 #                      opens ASV and skips the update check, and no marks or highlights
 #   app-home restore   put the backed-up app home back (does nothing when there's no backup)
 #
-# setup.tape and teardown.tape run this; produce-video also runs `restore` after every vhs run, so a tape
+# setup.tape and teardown.tape run this; produce-media also runs `restore` after every vhs run, so a tape
 # that fails part way still gets the real files back. If a backup already exists (an earlier run never
 # restored), setup keeps it rather than backing up the demo files over it.
 set -euo pipefail

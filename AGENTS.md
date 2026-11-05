@@ -48,17 +48,23 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   README hero uses `.tapes/overview/gifs/overview_small.gif` (no keys) and the README thumbnails link to the
   feature pages. Docs only use the `_small` GIFs.
   Screenshots must only show bundled or openly licensed versions.
-- `.tapes/` holds a VHS tape per feature. `.tapes/produce-video TAPE...` (needs vhs, ffmpeg, Pillow) records
-  it into `videos/`, `gifs/` (plain and `-with-keys`, each as `_large` at 720p and `_small` at 960 px wide with
-  32 colors), and `screenshots/` (with `-thumbnail` copies). `--gifs-only` re-exports the GIFs from the
-  existing videos. `app-home` swaps in a clean app home while recording. Git ignores the `.mp4` files, the
+- `.tapes/` holds a VHS tape per feature. `.tapes/produce-media TAPE...` (or `-a` for all; needs vhs, ffmpeg,
+  Pillow) records it into `videos/`, `gifs/` (plain and `-with-keys`, each as `_large` at 720p and `_small` at
+  960 px wide with 32 colors), and `screenshots/` (with `-thumbnail` copies). `--gifs-only` re-exports the GIFs
+  from the existing videos. Tapes record this working copy, not the installed app: `bible-tui` runs the
+  repo's `./bible-tui` (named in `$BIBLE_TUI_TAPE_BIN`). `app-home` swaps in a clean app home while recording
+  (`defaults/config.json`, which turns the clock off so recordings don't change with the time). `sandbox`
+  starts a shell in a throwaway HOME for tapes that show files or fake things (`your-files`, and
+  `about-and-update`, which fakes a newer release with a local git clone one commit behind). A tape with no
+  `.mp4` Output only takes screenshots, and a folder with `card.json` gets a composed card: the
+  `social-preview` tape makes `docs/screenshots/social-preview.png`. Git ignores the `.mp4` files, the
   `_large` GIFs, and the `.stamp`/`.recorded` build markers.
 - `docs/logo/svg/` has the logo SVGs (full, squarish, mark-only, and text-only, each for dark and light
   backgrounds), `docs/logo/png/` has PNG exports of each at common sizes, and `docs/logo/source/` has the `.ai`
   source. The README uses the full
-  logo, never the squarish one. `docs/screenshots/images/` keeps only the stills
-  that aren't recorded by a tape (`your-files.md`), and `docs/screenshots/social-preview.png` is the GitHub
-  social preview.
+  logo, never the squarish one. `docs/screenshots/social-preview.png` is the GitHub social preview, made by
+  the `social-preview` tape; after re-making it, upload it again in the repo settings (GitHub keeps its own
+  copy).
 - `tests/` holds `unittest` tests. `tests/helpers.py` has `make_bible` (writes a tiny database) and
   `FakeScreen` (lets `BibleTui` logic run without a terminal).
 - `.backlog/` (Backlog.md tasks) and `.agent/` are local-only and ignored by git; public issues live on GitHub.
