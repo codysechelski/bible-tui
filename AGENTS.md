@@ -58,9 +58,9 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
   (`defaults/config.json`, which turns the clock off so recordings don't change with the time). `sandbox`
   starts a shell in a throwaway HOME for tapes that show files or fake things (`your-files`, and
   `about-and-update`, which fakes a newer release with a local git clone one commit behind). A tape with no
-  `.mp4` Output only takes screenshots, and a folder with `card.json` gets a composed card: the
-  `social-preview` tape makes `docs/screenshots/social-preview.png`. Git ignores the `.mp4` files, the
-  `_large` GIFs, and the `.stamp`/`.recorded` build markers.
+  `.mp4` Output only takes screenshots, and a folder with `card.json` gets a composed card (headed by its
+  `logo` image, else its `title`): the `social-preview` tape makes `docs/screenshots/social-preview.png`. Git
+  ignores the `.mp4` files, the `_large` GIFs, and the `.stamp`/`.recorded` build markers.
 - `tapes/produce-reel` cuts the tapes' `-with-keys` videos into a shareable highlights reel, in 16:9 and 1:1
   (`tapes/reel/videos/bible-tui-reel_<format>.mp4`, ignored by git like every `.mp4`): an intro card, a leader
   and a framed clip per feature, and an outro with the install commands and GitHub link. `tapes/reel/reel.json`
