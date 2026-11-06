@@ -5,6 +5,20 @@ Thanks for your interest in bible-tui! Bug reports, ideas, documentation fixes, 
 Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md). To report a security
 problem, please follow the [security policy](SECURITY.md) instead of opening a public issue.
 
+## Christian identity and project scope
+
+I created bible-tui as a Christian Bible-reading application, and I intend to maintain that identity as the project grows.
+
+**Everyone is welcome to contribute.** You do not need to be Christian, share my beliefs, or profess any faith to report bugs, suggest improvements, or submit pull requests. I will evaluate contributions based on their content, quality, and fit with the project—not the contributor's religion, beliefs, or identity.
+
+**Being welcome to contribute is not a promise that every change will be merged.** As the maintainer of this repository, I retain final discretion over what belongs in it. I will not approve features or content that undermine its purpose as a Christian Bible application or that I believe conflict with my Christian faith. For example, I will not merge functionality intended to add non-biblical religious or spiritual texts to the app's reading library. This is a boundary on the scope of this repository, not a judgment about the people proposing those changes.
+
+Questions, respectful disagreement, and constructive discussion are welcome. I will aim to explain scope-based decisions clearly and respectfully, and I ask contributors to extend the same courtesy to others.
+
+The [MIT License](LICENSE) still governs what others may do with their own copies or forks of the code. Contributors are free to exercise those rights; this policy only describes what I am willing to accept into **this repository**.
+
+If you're unsure whether an idea fits, please [open a feature request](https://github.com/codysechelski/bible-tui/issues/new/choose) before investing time in implementation.
+
 ## Reporting bugs and asking for features
 
 Please [open an issue](https://github.com/codysechelski/bible-tui/issues/new/choose) first. The issue forms ask
