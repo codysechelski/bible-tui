@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parent
 
@@ -48,7 +49,7 @@ def load_media_module():
 media = load_media_module()
 Image, ImageDraw = media.Image, media.ImageDraw
 
-VERSION = "1"  # bump when the rendering changes, so every segment is redone
+VERSION = "2"  # bump when the rendering changes, so every segment is redone
 FPS = 30
 TRANSITION = 0.4  # seconds of crossfade between segments
 FORMATS = {"16x9": (1920, 1080), "1x1": (1080, 1080)}
@@ -269,30 +270,48 @@ def render_leader(feature: dict, number: int, count: int, layout: Layout, durati
     encode_scene(scene, duration, layout.size, output)
 
 
-def window_geometry(layout: Layout) -> tuple[int, int, int, int, int]:
-    """(x, y, width, clip height, title bar height) of the clip's window."""
-    width = layout.px(960) if layout.square else layout.px(1440)
-    bar = layout.px(34)
-    clip_h = round(width * 9 / 16)
+class Window(NamedTuple):
+    """Where the clip's terminal window goes: its outline, and the clip inside the chrome."""
+
+    x: int
+    y: int
+    width: int
+    height: int
+    bar: int  # the title bar along the top
+    clip_x: int
+    clip_y: int
+    clip_w: int
+    clip_h: int
+
+
+def window_geometry(layout: Layout) -> Window:
+    """The clip's window: a title bar on top, side borders, and a footer bar, all around a 16:9 clip."""
+    clip_w = layout.px(960) if layout.square else layout.px(1440)
+    clip_h = round(clip_w * 9 / 16)
+    bar, side, footer = layout.px(34), layout.px(8), layout.px(24)
+    width, height = clip_w + 2 * side, bar + clip_h + footer
     x = (layout.width - width) // 2
-    y = layout.px(330) if layout.square else layout.height - clip_h - bar - layout.px(58)
-    return x, y, width, clip_h, bar
+    y = layout.px(330) if layout.square else layout.height - height - layout.px(46)
+    return Window(x, y, width, height, bar, x + side, y + bar, clip_w, clip_h)
 
 
 def clip_background(layout: Layout) -> Image.Image:
     """The gradient with an empty terminal window (and its shadow) for the clip to play in."""
     image = layout.background().convert("RGBA")
-    x, y, width, clip_h, bar = window_geometry(layout)
+    window = window_geometry(layout)
+    x, y, width, height, bar = window[:5]
     radius = layout.px(14)
     shadow = Image.new("RGBA", layout.size, (0, 0, 0, 0))
-    ImageDraw.Draw(shadow).rounded_rectangle((x, y + layout.px(18), x + width, y + bar + clip_h + layout.px(18)),
+    ImageDraw.Draw(shadow).rounded_rectangle((x, y + layout.px(18), x + width, y + height + layout.px(18)),
                                              radius, fill=(0, 0, 0, 160))
     image.alpha_composite(shadow.filter(media.ImageFilter.GaussianBlur(layout.px(28))))
     draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((x, y, x + width - 1, y + bar + clip_h - 1), radius, fill=(*media.CARD_WINDOW, 255),
+    # The whole window is chrome-colored, so the clip sits in a frame: the title bar, the sides, and the footer
+    # (taller than the radius, so its rounded corners match the title bar's).
+    draw.rounded_rectangle((x, y, x + width - 1, y + height - 1), radius, fill=(*media.CARD_BAR, 255),
                            outline=(70, 74, 92, 255), width=max(1, layout.px(1.5)))
-    draw.rounded_rectangle((x + 1, y + 1, x + width - 2, y + bar), radius, fill=(*media.CARD_BAR, 255))
-    draw.rectangle((x + 1, y + bar - radius, x + width - 2, y + bar), fill=(*media.CARD_BAR, 255))
+    draw.rectangle((window.clip_x, window.clip_y, window.clip_x + window.clip_w - 1,
+                    window.clip_y + window.clip_h - 1), fill=(*media.CARD_WINDOW, 255))
     for index, color in enumerate(((255, 95, 86), (255, 189, 46), (39, 201, 63))):
         cx, r = x + layout.px(22) + index * layout.px(22), layout.px(7)
         draw.ellipse((cx - r, y + bar // 2 - r, cx + r, y + bar // 2 + r), fill=color)
@@ -301,17 +320,19 @@ def clip_background(layout: Layout) -> Image.Image:
     draw.text((x + (width - label_font.getlength(label)) / 2, y + bar / 2), label, font=label_font, fill=DIM,
               anchor="lm")
     if layout.square:
-        mark_font = font(layout.px(26), mono=True)
-        mark = "bible-tui"
-        draw.text(((layout.width - mark_font.getlength(mark)) / 2, layout.height - layout.px(76)), mark,
-                  font=mark_font, fill=DIM)
+        # A small logo centred in the space under the window.
+        with Image.open(LOGO) as logo:
+            logo_w = layout.px(190)
+            logo = logo.convert("RGBA").resize((logo_w, round(logo.height * logo_w / logo.width)), Image.LANCZOS)
+        middle = (y + height + layout.height) // 2
+        image.alpha_composite(logo, ((layout.width - logo.width) // 2, middle - logo.height // 2))
     return image
 
 
 def caption_layer(feature: dict, layout: Layout) -> Image.Image:
     """The feature's name and one-line description over the window, as a full-frame transparent image."""
     image = Image.new("RGBA", layout.size, (0, 0, 0, 0))
-    x, y, width, _, _ = window_geometry(layout)
+    x, _, width = window_geometry(layout)[:3]
     title_font = font(layout.px(60 if layout.square else 54), "bold")
     body_font = font(layout.px(32 if layout.square else 30), "light")
     summary = feature.get("caption", feature["description"])
@@ -339,13 +360,13 @@ def render_clip(feature: dict, layout: Layout, duration: float, source: Path, bu
     caption = build / f".{output.stem}-caption.png"
     clip_background(layout).convert("RGB").save(background)
     caption_layer(feature, layout).save(caption)
-    x, y, width, clip_h, bar = window_geometry(layout)
+    window = window_geometry(layout)
     speed = float(feature.get("speed", 1.0))
     rise = layout.px(24)
     progress_h = max(2, layout.px(5))
     graph = (
-        f"[1:v]setpts=(PTS-STARTPTS)/{speed},fps={FPS},scale={width}:{clip_h}:flags=lanczos[clip];"
-        f"[0:v][clip]overlay=x={x}:y={y + bar}[framed];"
+        f"[1:v]setpts=(PTS-STARTPTS)/{speed},fps={FPS},scale={window.clip_w}:{window.clip_h}:flags=lanczos[clip];"
+        f"[0:v][clip]overlay=x={window.clip_x}:y={window.clip_y}[framed];"
         f"[2:v]format=rgba,fade=t=in:st=0.15:d=0.5:alpha=1[caption];"
         f"[framed][caption]overlay=x=0:y='{rise}*pow(1-min(1,max(0,t-0.15)/0.5),3)':eval=frame[titled];"
         f"[3:v]format=rgba[bar];"
