@@ -1,5 +1,13 @@
 # Contributor Covenant Code of Conduct
 
+## Project Identity and Contribution Scope
+
+bible-tui is a Christian project centered on reading and studying the Bible. I welcome participation from everyone, including people who do not share my faith. No contributor is required to be Christian or to agree with my beliefs, and I will not judge contributions based on a person's religion or identity.
+
+Welcoming contributors does not mean that every proposed feature or piece of content fits this repository. As maintainer, I reserve the right to decline changes that conflict with the project's Christian purpose or introduce content that I consider contrary to my Christian faith. This includes proposals to incorporate non-biblical religious or spiritual texts as reading content. Decisions about what is merged will be based on the proposed change and the project's scope, not on who submitted it.
+
+I expect everyone, myself included, to treat others respectfully when discussing these decisions. See [Contributing](CONTRIBUTING.md#christian-identity-and-project-scope) for more detail.
+
 ## Our Pledge
 
 We as members, contributors, and leaders pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
