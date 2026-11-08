@@ -54,10 +54,13 @@ jobs:
       fail-fast: false
       matrix:
         # Every supported Python on Ubuntu; macOS (curses, termios, pbcopy, Homebrew) on the newest only,
-        # since macOS runners are slow to start.
+        # since macOS runners are slow to start. setup-python has no 3.9 build for Ubuntu 26.04 (which
+        # ubuntu-latest became in October 2026), so 3.9 runs on 24.04.
         os: [ubuntu-latest]
-        python-version: ["3.9", "3.13", "3.14"]
+        python-version: ["3.13", "3.14"]
         include:
+          - os: ubuntu-24.04
+            python-version: "3.9"
           - os: macos-latest
             python-version: "3.14"
     steps:
