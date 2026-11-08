@@ -8,6 +8,7 @@ dist/
 .venv/
 .DS_Store
 *.mp4
+*.mp3
 tapes/**/.*.stamp
 tapes/**/.*.recorded
 *_large.gif

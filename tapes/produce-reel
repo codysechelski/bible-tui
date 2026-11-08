@@ -6,7 +6,10 @@ an outro card that says how to install bible-tui and where it is on GitHub.
 Usage: produce-reel [--force] [--format 16x9|1x1 ...] [--spec reel/reel.json]
 
 What goes in the reel is reel/reel.json: the cards' words, and per feature a video (a path under tapes/, made
-by produce-media), where the clip starts, how long it runs, and how much faster it plays. Each format
+by produce-media), where the clip starts in it, how long the clip runs in the reel, and how much faster it
+plays (so it uses `duration * speed` seconds of the video, which must not run past its end). An optional
+`music` entry names a backing track beside reel.json (`file`, with `volume`, `fade_in`, and `fade_out`), looped
+to fill the reel and faded in and out. Audio files are ignored by git, so it must be supplied locally. Each format
 (`16x9` at 1920x1080 and `1x1` at 1080x1080) is written to reel/videos/bible-tui-reel_<format>.mp4.
 
 Nothing is redone that doesn't need to be. Every segment (a card, a leader, or a clip) is rendered to
@@ -451,8 +454,8 @@ def render_segment(segment: dict, layout: Layout, build: Path) -> None:
         render_outro(segment["spec"], layout, output)
 
 
-def join(plan: list[dict], build: Path, output: Path) -> None:
-    """Crossfade the segments together, fading in from and out to black."""
+def join(plan: list[dict], build: Path, output: Path, music: dict | None, folder: Path) -> None:
+    """Crossfade the segments together, fading in from and out to black, over the looped backing track."""
     inputs, chain = [], []
     for segment in plan:
         inputs += ["-i", str(build / segment["file"])]
@@ -462,9 +465,18 @@ def join(plan: list[dict], build: Path, output: Path) -> None:
         chain.append(f"{last}[{index}:v]xfade=transition=fade:duration={TRANSITION}:offset={length - TRANSITION:.3f}{label}")
         last, length = label, length + segment["duration"] - TRANSITION
     chain.append(f"{last}fade=t=in:d=0.5,fade=t=out:st={length - 0.8:.3f}:d=0.8,format=yuv420p[v]")
+    maps = ["-map", "[v]"]
+    if music:
+        # -stream_loop repeats the track for as long as the reel needs; atrim cuts it to the reel's length.
+        inputs += ["-stream_loop", "-1", "-i", str(folder / music["file"])]
+        fade_in, fade_out = float(music.get("fade_in", 2.0)), float(music.get("fade_out", 4.0))
+        chain.append(f"[{len(plan)}:a]atrim=0:{length:.3f},asetpts=PTS-STARTPTS,"
+                     f"volume={float(music.get('volume', 1.0))},afade=t=in:d={fade_in},"
+                     f"afade=t=out:st={max(length - fade_out, 0):.3f}:d={fade_out}[a]")
+        maps += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
     partial = output.with_name(f".{output.name}.partial.mp4")
     run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *inputs, "-filter_complex", ";".join(chain),
-         "-map", "[v]", "-r", str(FPS), "-c:v", "libx264", "-crf", "20", "-preset", "slow",
+         *maps, "-r", str(FPS), "-c:v", "libx264", "-crf", "20", "-preset", "slow",
          "-movflags", "+faststart", str(partial)])
     partial.replace(output)
     print(f"wrote {output} ({length:.1f}s)")
@@ -484,13 +496,31 @@ def produce(spec: dict, layout: Layout, sources: dict[str, str], folder: Path, f
     output = folder / "videos" / f"{spec['name']}_{layout.name}.mp4"
     output.parent.mkdir(exist_ok=True)
     stamp = output.with_name(f".{output.name}.stamp")
+    music = spec.get("music")
+    soundtrack = [music, sha256_file(folder / music["file"])] if music else None
     fingerprint = hashlib.sha256(json.dumps([[s["file"], s["duration"]] for s in plan]
-                                            + [TRANSITION, VERSION]).encode()).hexdigest()
+                                            + [TRANSITION, VERSION, soundtrack]).encode()).hexdigest()
     if not force and output.is_file() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
         print(f"up to date: {output}")
         return
-    join(plan, build, output)
+    join(plan, build, output, music, folder)
     stamp.write_text(fingerprint + "\n")
+
+
+def check_clip_fits(feature: dict, video: Path) -> None:
+    """Stop when a clip would run past the end of its video, which would freeze on the last frame."""
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                            str(video)], capture_output=True, text=True)
+    if probe.returncode != 0:
+        sys.exit(f"produce-reel: ffprobe couldn't read {video}")
+    length = float(probe.stdout.strip())
+    start, speed = float(feature.get("start", 0)), float(feature.get("speed", 1.0))
+    end = start + feature["duration"] * speed
+    if end > length + 0.05:
+        longest = (length - start) / speed
+        sys.exit(f"produce-reel: {feature['title']!r} needs {video.name} up to {end:.1f}s "
+                 f"(start {start:g} + duration {feature['duration']:g} x speed {speed:g}), but it's "
+                 f"{length:.1f}s long; use a duration of at most {longest:.1f}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -502,13 +532,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not shutil.which("ffmpeg"):
         sys.exit("produce-reel: ffmpeg not found on PATH")
+    if not shutil.which("ffprobe"):
+        sys.exit("produce-reel: ffprobe not found on PATH")
     spec = json.loads(args.spec.read_text(encoding="utf-8"))
     sources = {}
     for feature in spec["features"]:
         video = ROOT / feature["video"]
         if not video.is_file():
             sys.exit(f"produce-reel: {video} doesn't exist; run produce-media on that tape first")
+        check_clip_fits(feature, video)
         sources[feature["video"]] = sha256_file(video)
+    music = spec.get("music")
+    if music and not (args.spec.parent / music["file"]).is_file():
+        sys.exit(f"produce-reel: backing track {args.spec.parent / music['file']} doesn't exist")
     for name in args.format or FORMATS:
         produce(spec, Layout(name), sources, args.spec.parent, args.force)
     return 0

@@ -1,6 +1,12 @@
 {
   "name": "bible-tui-reel",
   "leader_duration": 3.2,
+  "music": {
+    "file": "real-backing-track.mp3",
+    "volume": 1.0,
+    "fade_in": 2.0,
+    "fade_out": 4.0
+  },
   "intro": {
     "duration": 4.0,
     "tagline": "Read the Bible in your terminal.",
@@ -11,25 +17,41 @@
       "title": "Navigate",
       "description": "Move through books, chapters, and verses with the arrow keys, or with Vim keys if you know them.",
       "caption": "Arrows or Vim keys, your choice.",
-      "bullets": ["Books preview as you move", "Bible order or A to Z", "Every key listed with ?"],
+      "bullets": [
+        "Books preview as you move",
+        "Bible order or A to Z",
+        "Every key listed with ?"
+      ],
       "video": "navigation/videos/navigation-with-keys.mp4",
-      "start": 3, "duration": 10, "speed": 1.4
+      "start": 33,
+      "duration": 10,
+      "speed": 1.4
     },
     {
       "title": "Search",
       "description": "Find every verse that mentions a word, with a live match count as you type.",
       "caption": "Live matches as you type.",
-      "bullets": ["/ to search, n and N to jump", "Matches highlighted in place"],
+      "bullets": [
+        "/ to search, n and N to jump",
+        "Matches highlighted in place"
+      ],
       "video": "searching/videos/searching-with-keys.mp4",
-      "start": 3, "duration": 9, "speed": 1.3
+      "start": 3,
+      "duration": 10,
+      "speed": 1.3
     },
     {
       "title": "Fuzzy find",
       "description": "Search the whole Bible at once, even when you only half remember the words.",
       "caption": "The whole Bible, half-remembered words.",
-      "bullets": ["Typos and missing spaces are fine", "Preview before you jump"],
+      "bullets": [
+        "Typos and missing spaces are fine",
+        "Preview before you jump"
+      ],
       "video": "fuzzy-finding/videos/fuzzy-finding-with-keys.mp4",
-      "start": 3, "duration": 9, "speed": 1.2
+      "start": 12,
+      "duration": 12,
+      "speed": 1.2
     },
     {
       "title": "Go to any verse",
@@ -37,15 +59,22 @@
       "caption": "Type a reference, Tab to complete.",
       "bullets": ["ctrl+g or :John 3:16", "Tab completes book names"],
       "video": "go-to-reference/videos/go-to-reference-with-keys.mp4",
-      "start": 3, "duration": 9, "speed": 1.3
+      "start": 14,
+      "duration": 8,
+      "speed": 1.2
     },
     {
       "title": "Side by side",
       "description": "Open two versions next to each other. They stay on the same verse as you read.",
       "caption": "Two versions, one verse.",
-      "bullets": ["Split side by side or top and bottom", "Missing verses line up and show as gaps"],
+      "bullets": [
+        "Split side by side or top and bottom",
+        "Missing verses line up and show as gaps"
+      ],
       "video": "splits/videos/splits-with-keys.mp4",
-      "start": 8, "duration": 12, "speed": 1.4
+      "start": 8,
+      "duration": 12,
+      "speed": 1.4
     },
     {
       "title": "Marks",
@@ -53,7 +82,9 @@
       "caption": "Bookmark verses, jump back anytime.",
       "bullets": ["m to mark, M to list", "Marks show in every version"],
       "video": "marks/videos/marks-with-keys.mp4",
-      "start": 3, "duration": 10, "speed": 1.5
+      "start": 3,
+      "duration": 10,
+      "speed": 1.5
     },
     {
       "title": "Highlights",
@@ -61,7 +92,9 @@
       "caption": "Six colors, saved for every version.",
       "bullets": ["c to pick a color", "C lists every highlight"],
       "video": "highlight/videos/feature-highlight-with-keys.mp4",
-      "start": 3, "duration": 10, "speed": 1.5
+      "start": 18,
+      "duration": 12.9,
+      "speed": 1.8
     },
     {
       "title": "Copy verses",
@@ -69,13 +102,18 @@
       "caption": "Paste scripture anywhere.",
       "bullets": ["yy copies a verse", "Your own format with the reference"],
       "video": "yanking/videos/yanking-with-keys.mp4",
-      "start": 3, "duration": 12, "speed": 2.0
+      "start": 10,
+      "duration": 39,
+      "speed": 1.8
     }
   ],
   "outro": {
     "duration": 6.5,
     "heading": "Install bible-tui",
-    "install": ["brew install codysechelski/tap/bible-tui", "pipx install bible-tui"],
+    "install": [
+      "brew install codysechelski/tap/bible-tui",
+      "pipx install bible-tui"
+    ],
     "github_label": "Source, docs, and issues",
     "github": "github.com/codysechelski/bible-tui",
     "footnote": "MIT licensed · KJV and ASV included"
