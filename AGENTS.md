@@ -93,7 +93,8 @@ No linter or formatter is installed.
 - Releases are automatic. `.github/workflows/release.yml` runs on every push to `main` and every pull request.
   Its `changes` job skips the test matrix when only docs changed (`*.md`, `docs/`, `tapes/`, issue templates,
   `LICENSE`). The matrix is Ubuntu on Python 3.9, 3.13, and 3.14, plus macOS on 3.14 only, because macOS
-  runners are slow to start. The `tests` job always runs and passes when the matrix passed or was skipped; it's
+  runners are slow to start. Python 3.9 runs on `ubuntu-24.04`, because setup-python has no 3.9 build for
+  Ubuntu 26.04 (now `ubuntu-latest`). The `tests` job always runs and passes when the matrix passed or was skipped; it's
   the check the ruleset requires, so keep its name. On pushes to `main` it then runs python-semantic-release
   (config in `[tool.semantic_release]` in `pyproject.toml`). That bumps `__version__` in
   `bible_tui/__init__.py`, updates `CHANGELOG.md`, commits `chore(release): X.Y.Z`, tags `vX.Y.Z`, and creates
