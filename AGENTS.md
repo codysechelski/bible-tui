@@ -64,7 +64,10 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 - `tapes/produce-reel` cuts the tapes' `-with-keys` videos into a shareable highlights reel, in 16:9 and 1:1
   (`tapes/reel/videos/bible-tui-reel_<format>.mp4`, ignored by git like every `.mp4`): an intro card, a leader
   and a framed clip per feature, and an outro with the install commands and GitHub link. `tapes/reel/reel.json`
-  holds the words and each clip's video, start, duration, and speed. Segments are cached in
+  holds the words and each clip's video, start, duration (in reel seconds; the clip reads `duration * speed`
+  seconds of its video, and the script refuses one that runs past the video's end), and speed. Its optional
+  `music` entry names a backing track in `tapes/reel/` that's looped to the reel's length and faded in and out;
+  git ignores `*.mp3`, so the track stays local and isn't in the repo. Segments are cached in
   `tapes/reel/build/` (ignored) under hashes of their inputs, so a run only re-renders what changed.
   `produce-media -a` (or `--reel`) runs it at the end. Bump its `VERSION` when the rendering changes.
 - `docs/logo/svg/` has the logo SVGs (full, squarish, mark-only, and text-only, each for dark and light
