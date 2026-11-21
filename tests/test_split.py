@@ -194,6 +194,37 @@ class SplitTest(unittest.TestCase):
         self.press(KEY_CTRL_W, "q")
         self.assertEqual(self.app.message, "only one pane: q quits")
 
+    def test_ctrl_w_x_swaps_the_panes(self) -> None:
+        self.go_to("Matthew", 17, 21)
+        self.split_with_asv()
+        scroll = self.app.text_scroll
+        self.assertGreater(scroll, 0)
+        self.press(KEY_CTRL_W, "x")
+        self.assertEqual((self.app.version, self.app.split_pane.version), (self.asv, self.kjv))
+        self.assertEqual((self.app.split, self.app.focus, self.app.active_pane), (SPLIT_VERTICAL, FOCUS_TEXT, 0))
+        self.assertEqual(self.app.location_label(), "Matthew 17:21")  # Not in the ASV, but still a row.
+        self.assertIsInstance(self.app.verses[self.app.verse_cursor], MissingVerse)
+        self.assertNotIsInstance(self.app.split_pane.verses[self.app.verse_cursor], MissingVerse)
+        self.assertEqual(self.app.text_scroll, scroll)
+        self.assertEqual(self.app.message, "swapped panes")
+        self.assertEqual(self.version_changes, ["ASV"])
+        self.assertEqual(self.split_changes[-1], (SPLIT_VERTICAL, "KJV"))
+        self.press(":", *"swap", 10)
+        self.assertEqual((self.app.version, self.app.split_pane.version, self.app.active_pane), (self.kjv, self.asv, 1))
+
+    def test_swap_leaves_visual_mode_and_search(self) -> None:
+        self.go_to("John", 3, 16)
+        self.split_with_asv()
+        self.press("/", *"believeth", 10, "V")
+        self.app.run_command("swap_panes")
+        self.assertFalse(self.app.visual_mode)
+        self.assertIsNone(self.app.search_scope)
+
+    def test_swap_needs_a_split(self) -> None:
+        self.press(KEY_CTRL_W, "x")
+        self.assertEqual(self.app.message, "only one pane")
+        self.assertEqual(self.version_changes, [])
+
     def test_split_refused_when_terminal_is_too_narrow(self) -> None:
         self.app.stdscr.size = (30, 70)
         self.press(KEY_CTRL_W, "v")

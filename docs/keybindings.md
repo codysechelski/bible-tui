@@ -62,6 +62,7 @@ Enter runs the line, and Esc cancels. Commands can be shortened like in Vim (`:q
 | `:set version=ASV` | Switch the focused pane's version; `:set version` alone opens the picker |
 | `:vsplit` / `:split` | Split side by side / top and bottom |
 | `:close` / `:only` | Close the focused pane / the other pane |
+| `:swap` | Swap the two panes |
 | `:marks` / `:highlights` | List marks / highlights |
 | `:potd` | Go to the proverb of the day: verse 1 of the Proverbs chapter that matches today's date (Proverbs 28 on the 28th) |
 | `:about` | Show the version, whether an update is out, and the project link (`o` opens it, `y` copies it) |
@@ -78,6 +79,7 @@ a verse that one version leaves out is shaded `░░░`.
 | Split side by side / top and bottom (then pick the new pane's version) | `ctrl+w v` / `ctrl+w s` |
 | Move between the two text panes | ← / →, Tab, or `ctrl+w w` (`ctrl+w h`/`j`/`k`/`l`) |
 | Change either pane's version (two columns; ← / → picks the pane) | `t` |
+| Swap the two panes (focus moves with the version you're reading) | `ctrl+w x` |
 | Close the focused pane / the other pane | `ctrl+w q` / `ctrl+w o` |
 
 Two panes is the most. Visual mode, copying, `/` search, and fuzzy find use the focused pane's version. Set

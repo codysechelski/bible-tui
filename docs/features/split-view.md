@@ -22,6 +22,7 @@ Teles, from [eBible.org](https://ebible.org/porbr2018/copyright.htm), licensed u
 | Split side by side / top and bottom | `ctrl+w v` / `ctrl+w s` | `:vsplit` / `:split` |
 | Move between the two panes | ← / →, Tab, or `ctrl+w w` | |
 | Change either pane's version | `t` | `:set version=ASV` |
+| Swap the two panes | `ctrl+w x` | `:swap` |
 | Close this pane / the other pane | `ctrl+w q` / `ctrl+w o` | `:close` / `:only` |
 
 Copying, `/` search, and the fuzzy finder use the pane you're in. Set `"remember_split": true` in `config.json`
