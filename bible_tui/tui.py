@@ -40,6 +40,7 @@ KEY_CTRL_W = 23
 KEY_CTRL_O = 15
 KEY_CTRL_Q = 17
 KEY_CTRL_V = 22
+KEY_CTRL_X = 24
 KEY_TAB = 9
 PAIR_SEARCH = 8
 PAIR_ERROR = 9
@@ -189,6 +190,7 @@ EX_COMMANDS: tuple[ExCommand, ...] = (
     ExCommand("split", "sp", "", "split top and bottom"),
     ExCommand("close", "clo", "", "close the focused pane"),
     ExCommand("only", "on", "", "close the other pane"),
+    ExCommand("swap", "sw", "", "swap the two panes"),
     ExCommand("marks", "marks", "", "list marks"),
     ExCommand("highlights", "hi", "", "list highlights"),
     ExCommand("potd", "potd", "", "go to the proverb of the day"),
@@ -281,6 +283,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
             Command("split side by side", "ctrl+w v", "split_vertical"),
             Command("split top and bottom", "ctrl+w s", "split_horizontal"),
             Command("switch pane", "ctrl+w w / left / right", "switch_pane"),
+            Command("swap panes", "ctrl+w x / :swap", "swap_panes"),
             Command("close pane", "ctrl+w q", "close_pane"),
             Command("close other pane", "ctrl+w o", "close_other_pane"),
             Command("toggle book order", "a", "toggle_sort"),
@@ -635,7 +638,7 @@ class BibleTui:
         if key == KEY_CTRL_W:
             self.pending_y = False
             self.pending_w = True
-            self.message = "ctrl+w: v side by side, s top and bottom, w switch, q close, o close other"
+            self.message = "ctrl+w: v side by side, s top and bottom, w switch, x swap, q close, o close other"
             return True
         if key in (KEY_CTRL_P, ord("?")):
             self.open_command_modal()
@@ -786,6 +789,8 @@ class BibleTui:
                 self.close_pane(1 - self.active_pane)
         elif key in (ord("w"), KEY_CTRL_W, ord("p")):
             self.focus_pane(1 - self.active_pane if self.focus == FOCUS_TEXT else self.active_pane)
+        elif key in (ord("x"), KEY_CTRL_X):
+            self.swap_panes()
         elif key in (ord("h"), ord("k"), curses.KEY_LEFT, curses.KEY_UP):
             self.focus_pane(0)
         elif key in (ord("l"), ord("j"), curses.KEY_RIGHT, curses.KEY_DOWN):
@@ -890,6 +895,8 @@ class BibleTui:
             self.open_split_picker(SPLIT_HORIZONTAL)
         elif action == "switch_pane":
             self.handle_window_key(ord("w"))
+        elif action == "swap_panes":
+            self.swap_panes()
         elif action == "close_pane":
             self.close_pane(self.active_pane)
         elif action == "close_other_pane":
@@ -1145,6 +1152,48 @@ class BibleTui:
             self.message = f"closed pane; showing {self.version.name}"
         else:
             self.message = "closed pane"
+
+    def swap_panes(self) -> None:
+        """Trade the split panes' versions, so left and right (or top and bottom) change places. The verse
+        and scroll stay put, and focus follows the version you were reading to the other side."""
+        pane = self.split_pane
+        if pane is None:
+            self.message = "only one pane"
+            return
+        try:
+            books = pane.store.books(self.alphabetical)
+            pane_books = {book.sort_order: book for book in self.store.books(False)}
+        except sqlite3.Error as error:
+            self.show_error(f"could not swap panes: {error}")
+            return
+        position = self.current_position()
+        focus, column = self.focus, self.text_cursor_col
+        scrolls = (self.book_scroll, self.chapter_scroll, self.text_scroll)
+        self.exit_visual_mode()
+        self.clear_search()  # Book and verse matches belong to the old versions.
+        self.store, pane.store = pane.store, self.store
+        self.version, pane.version = pane.version, self.version
+        self.all_verses, pane.all_verses = pane.all_verses, self.all_verses
+        self.books, pane.books = books, pane_books
+        self.rebuild_book_rows()
+        self.goto_verse_cache = {}
+        self.restore_position(position)
+        self.active_pane = 1 - self.active_pane
+        self.focus = focus if self.verses or focus != FOCUS_TEXT else FOCUS_BOOKS
+        if self.current_position() == position:
+            # Both panes keep the same rows, so the same scroll shows the same verses.
+            self.book_scroll, self.chapter_scroll, self.text_scroll = scrolls
+            self.text_cursor_col = column
+        self.clamp_text_cursor()
+        self.ensure_visible()
+        self.message = "swapped panes"
+        if self.on_version_change is not None:
+            try:
+                self.on_version_change(self.version)
+            except OSError:
+                self.show_error("swapped panes (could not save state)")
+                return
+        self.notify_split_change()
 
     def notify_split_change(self) -> None:
         if self.on_split_change is None:
@@ -1895,6 +1944,8 @@ class BibleTui:
             self.close_pane(self.active_pane)
         elif command.name == "only":
             self.handle_window_key(ord("o"))
+        elif command.name == "swap":
+            self.swap_panes()
         elif command.name == "marks":
             self.open_list_modal(LIST_MARKS)
         elif command.name == "highlights":

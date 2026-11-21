@@ -183,7 +183,7 @@ No linter or formatter is installed.
   Home/End, Enter, Esc). Vim keys are extra aliases, never the only way. Current aliases: `h`/`j`/`k`/`l`,
   `ctrl+u`/`ctrl+d` (half page), `ctrl+b`/`ctrl+f` (page), `gg`/`G`, `0`/`$`, `w`/`b`/`e`, `v`/`V`, `y`/`yy`,
   `:` (command line), `'`/`` ` `` (marks list), `"` (highlights list), `?` (commands), and the `ctrl+w` split commands
-  (`v`, `s`, `w`, `h`/`j`/`k`/`l`, `q`/`c`, `o`). Don't add count prefixes, Vim-style lettered marks, jump
+  (`v`, `s`, `w`, `h`/`j`/`k`/`l`, `x`, `q`/`c`, `o`). Don't add count prefixes, Vim-style lettered marks, jump
   lists, `H`/`L`, or other `ctrl+w` window commands. `M`/`C` are the plain-key marks/highlights lists (`M` is not Vim's middle-of-screen). Two-key sequences (`gg`, `yy`, `ctrl+w x`) use the `pending_g`/`pending_y`/`pending_w` flags. `]`/`[` step chapters
   across books in Bible order even when the list is alphabetical. Moving focus right must not re-select the
   book or chapter already shown (`ensure_cursor_book_selected`), or you lose your place.
@@ -225,7 +225,8 @@ No linter or formatter is installed.
   line up and `text_scroll` is shared. `active_pane` picks the pane for visual mode, yank, `/` search
   (`search_pane`), and fuzzy find; code that reads verse text uses `active_verses`, not `verses`. Left/Right
   and Tab move between text panes; `h`/`l` stay character motions, except `h` at column 0 (outside visual
-  mode) moves focus left like Left. Opening a split shows the version picker
+  mode) moves focus left like Left. `ctrl+w x` (or `:swap`, `swap_panes`) trades the two versions, keeping
+  the verse and scroll, and focus moves with the version you were reading. Opening a split shows the version picker
   in `PICK_NEW_PANE` mode; `t` while split uses `PICK_PANES` (two columns). Closing the first pane switches the
   main version to the second pane's. A split that no longer fits the terminal draws only the focused pane
   (`text_pane_rects`). `on_split_change` lets the CLI save `split`/`split_version` to `state.json`, only when
