@@ -2,6 +2,57 @@
 
 <!-- version list -->
 
+## v0.11.0 (2026-11-21)
+
+### Chores
+
+- Rename .tapes to tapes ([#16](https://github.com/codysechelski/bible-tui/pull/16),
+  [`4f118b1`](https://github.com/codysechelski/bible-tui/commit/4f118b1211579a03e80554c84e624e0d0bde050b))
+
+### Continuous Integration
+
+- Keep the release build artifact for 1 day, since publish only needs it within the run
+  ([`9b02d73`](https://github.com/codysechelski/bible-tui/commit/9b02d735cae9d5e8f12be10f1123d31e187a6fb0))
+
+- Run the Python 3.9 tests on Ubuntu 24.04
+  ([#24](https://github.com/codysechelski/bible-tui/pull/24),
+  [`b9998b5`](https://github.com/codysechelski/bible-tui/commit/b9998b5b197959c1d000b592840fa0a61d89267e))
+
+- Skip tests for docs-only changes and run macOS on one Python
+  ([#18](https://github.com/codysechelski/bible-tui/pull/18),
+  [`52137c7`](https://github.com/codysechelski/bible-tui/commit/52137c7c835706161881aabbe6a96c3df9ca4889))
+
+### Documentation
+
+- Add a backing track to the reel, frame its clips, and use the logo on the social card
+  ([#23](https://github.com/codysechelski/bible-tui/pull/23),
+  [`09d3b33`](https://github.com/codysechelski/bible-tui/commit/09d3b33caddb5cf840fd9a2bb36548a82e394b01))
+
+- Add produce-reel for a shareable highlights reel
+  ([#14](https://github.com/codysechelski/bible-tui/pull/14),
+  [`2342292`](https://github.com/codysechelski/bible-tui/commit/234229206023d3aaafa98d2c7efcd5923ea07a27))
+
+- Clarify Christian identity and contribution boundaries
+  ([#20](https://github.com/codysechelski/bible-tui/pull/20),
+  [`869669c`](https://github.com/codysechelski/bible-tui/commit/869669c87fa4dc462ab1e2868f8d92ea41b12382))
+
+- Frame the reel's clips and use the logo on the social card
+  ([#21](https://github.com/codysechelski/bible-tui/pull/21),
+  [`1c31099`](https://github.com/codysechelski/bible-tui/commit/1c3109970b688b5c60b87b6d72808783ac69bf66))
+
+- Keep the UI's colors in every GIF ([#19](https://github.com/codysechelski/bible-tui/pull/19),
+  [`45972aa`](https://github.com/codysechelski/bible-tui/commit/45972aa00f739d996e218decc753db6d1eab0cd4))
+
+- Re-record every tape with the new top bar
+  ([#17](https://github.com/codysechelski/bible-tui/pull/17),
+  [`a5f73ca`](https://github.com/codysechelski/bible-tui/commit/a5f73ca30638c030a4b84afbfead92b716830df8))
+
+### Features
+
+- Swap the two panes of a split ([#30](https://github.com/codysechelski/bible-tui/pull/30),
+  [`fdcc62d`](https://github.com/codysechelski/bible-tui/commit/fdcc62decbf8cd88ed4c6f59a3cdd3984ba355ba))
+
+
 ## v0.10.0 (2026-11-05)
 
 ### Documentation
