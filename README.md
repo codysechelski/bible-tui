@@ -78,7 +78,7 @@ bible-tui --paths                 # show the config, state, and Bible folders in
 | Switch version | `t` |
 | Split to compare versions | `ctrl+w v` |
 | Mark / highlight a verse | `m` / `c` |
-| Copy the verse | `yy` |
+| Copy the verse / the selected verses with their reference | `yy` / `Y` |
 | All commands and keys | `ctrl+p` or `?` |
 | Quit | `q` |
 
@@ -117,7 +117,8 @@ You can still read any version you have the rights to use:
   "nerd_font": false,
   "remember_split": false,
   "remember_position": false,
-  "yank_format": "{text}"
+  "copy_verse_format": "{text}",
+  "copy_passage_format": "{text}\n— {reference} · {version}"
 }
 ```
 

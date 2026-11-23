@@ -10,7 +10,7 @@ sandbox="$(mktemp -d -t bible-tui-yanking)"
 mkdir -p "$sandbox/.config/bible-tui" "$sandbox/.config/nvim"
 
 # The app home, found the way bible-tui finds it. setup.tape has already reset it to the clean defaults
-# (no yank_format, ASV open, no update check), so the sandbox starts from a copy of it.
+# (no copy_verse_format, ASV open, no update check), so the sandbox starts from a copy of it.
 if [[ -n "${BIBLE_TUI_HOME:-}" ]]; then
   app="$BIBLE_TUI_HOME"
 elif [[ -d "$HOME/.bible-tui" ]]; then

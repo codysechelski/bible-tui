@@ -153,7 +153,34 @@ Ctrl+B
 Left
 Sleep 800ms
 
-# ---- 4. Add a yank_format to config.json and copy the same verse again ------
+# ---- 3b. Still on John 3:16: select through verse 18 and copy it as a passage with Y
+Type "V"
+Sleep 400ms
+Type@400ms "jj"
+Sleep 600ms
+Type "Y"
+Sleep 1.2s
+
+Ctrl+B
+Right
+Sleep 600ms
+# A heading saying what this example shows, a blank line, then the paste.
+Type "i"
+Type@50ms "## A passage with Y"
+Enter@250ms 2
+Escape
+Sleep 400ms
+Type "p"
+Sleep 800ms
+Type@200ms "Go"
+Enter@250ms 2
+Escape
+Sleep 800ms
+Ctrl+B
+Left
+Sleep 800ms
+
+# ---- 4. Add a copy_verse_format to config.json and copy the same verse again ------
 Type@250ms ":q"
 Sleep 400ms
 Enter
@@ -171,7 +198,7 @@ Type "A"
 Sleep 300ms
 Type ","
 Enter
-Type@100ms `"yank_format": "{text}\n\n  ~ {reference} {version}"`
+Type@100ms `"copy_verse_format": "{text}\n\n  ~ {reference} {version}"`
 Sleep 1s
 Escape
 Sleep 600ms
@@ -204,7 +231,7 @@ Right
 Sleep 600ms
 # A heading saying what this example shows, a blank line, then the paste.
 Type "i"
-Type@50ms "## yy with a yank_format"
+Type@50ms "## yy with a copy_verse_format"
 Enter@250ms 2
 Escape
 Sleep 400ms

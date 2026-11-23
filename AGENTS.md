@@ -15,7 +15,9 @@ one SQLite database, discovered from a list of folders. The KJV and ASV are bund
 - `bible_tui/paths.py` resolves the app home (`$BIBLE_TUI_HOME`, else `~/.bible-tui` if it exists, else
   `$XDG_CONFIG_HOME/bible-tui`). Functions take an `env` mapping so tests never touch the real home.
 - `bible_tui/config.py` holds `Settings`/`load_settings` for the user-written `config.json` (including the
-  `yank_format` template for `yy`, validated against `YANK_FORMAT_FIELDS` at load) and
+  `copy_verse_format` template for `yy` and `copy_passage_format` for `Y`, validated by `check_template`
+  against `VERSE_FORMAT_FIELDS`/`PASSAGE_FORMAT_FIELDS` at load; the old `yank_format` name still works, with
+  a warning) and
   `load_state`/`save_state` for the app-written `state.json`. It also has `write_json`, an atomic writer meant
   for marks, highlights, and future notes files.
 - `bible_tui/versions.py` holds `BibleVersion`, `inspect_database` (schema check plus metadata), and
@@ -181,7 +183,7 @@ No linter or formatter is installed.
   the command line). Autocomplete uses Tab to accept suggestions and `ctrl+n` to cycle suggestions.
 - Keybinding policy: every action must be reachable without Vim knowledge (arrows, Tab, Page Up/Down,
   Home/End, Enter, Esc). Vim keys are extra aliases, never the only way. Current aliases: `h`/`j`/`k`/`l`,
-  `ctrl+u`/`ctrl+d` (half page), `ctrl+b`/`ctrl+f` (page), `gg`/`G`, `0`/`$`, `w`/`b`/`e`, `v`/`V`, `y`/`yy`,
+  `ctrl+u`/`ctrl+d` (half page), `ctrl+b`/`ctrl+f` (page), `gg`/`G`, `0`/`$`, `w`/`b`/`e`, `v`/`V`, `y`/`yy`/`Y`,
   `:` (command line), `'`/`` ` `` (marks list), `"` (highlights list), `?` (commands), and the `ctrl+w` split commands
   (`v`, `s`, `w`, `h`/`j`/`k`/`l`, `x`, `q`/`c`, `o`). Don't add count prefixes, Vim-style lettered marks, jump
   lists, `H`/`L`, or other `ctrl+w` window commands. `M`/`C` are the plain-key marks/highlights lists (`M` is not Vim's middle-of-screen). Two-key sequences (`gg`, `yy`, `ctrl+w x`) use the `pending_g`/`pending_y`/`pending_w` flags. `]`/`[` step chapters
@@ -202,6 +204,11 @@ No linter or formatter is installed.
   when `nerd_font` is on) and clear themselves after `MESSAGE_SECONDS`: `run` sets a `getch` timeout from
   `message_timeout_ms` and redraws when it fires. Use `show_error` for failures (saves, opening a database,
   the clipboard).
+- `Y` (`BibleTui.yank_passage`, "copy passage with reference" in `ctrl+p`) copies whole verses, like Vim's
+  visual `Y`: a character selection grows to full verses and the message says `(whole verses)`. `y` stays plain
+  text. `fill_copy_template` fills both copy templates; a multi-line `{text}` repeats a prefix of only spaces
+  and symbols (`> `, an indent) on every line, so templates need no output-type setting. `passage_reference`
+  writes `John 3:16–18` with an en dash. Verses the focused pane lacks are left out of the text.
 - `m` toggles a mark on the current verse or every verse in the visual selection (`BibleTui.toggle_mark`).
 - `c` opens the highlight picker for the same targets (`target_verse_keys`): six colors plus Clear, keys `1`–`6`,
   `0`/`x`/`d` to clear, or arrows and Enter. It preselects the verses' shared color, else the last color used.

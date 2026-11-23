@@ -22,7 +22,9 @@ from bible_tui.tui import (
     KEY_TAB,
     BibleTui,
     build_fuzzy_matches,
+    fill_copy_template,
     match_spans,
+    passage_reference,
     parse_fuzzy_query,
     word_spans,
 )
@@ -209,9 +211,9 @@ class KeybindingTest(unittest.TestCase):
         self.assertEqual(copied, ["Jesus wept."])
         self.assertEqual(self.app.message, "yanked verse")
 
-    def test_yy_uses_the_yank_format(self) -> None:
+    def test_yy_uses_the_copy_verse_format(self) -> None:
         self.go_to("Genesis", 1, 1)
-        self.app.yank_format = '"{text}" ({book_abbr} {chapter}:{verse} {version}) {{{version_name}}}'
+        self.app.copy_verse_format = '"{text}" ({book_abbr} {chapter}:{verse} {version}) {{{version_name}}}'
         copied: list[str] = []
         with mock.patch("bible_tui.tui.copy_to_clipboard", side_effect=lambda text: copied.append(text) or True):
             self.press("y", "y")
@@ -219,6 +221,46 @@ class KeybindingTest(unittest.TestCase):
             copied,
             ['"In the beginning God created the heaven and the earth." (Gen. 1:1 KJV) {King James Version}'],
         )
+
+    def copied_by(self, *keys: object) -> list[str]:
+        copied: list[str] = []
+        with mock.patch("bible_tui.tui.copy_to_clipboard", side_effect=lambda text: copied.append(text) or True):
+            self.press(*keys)
+        return copied
+
+    def test_Y_copies_selected_verses_as_a_passage(self) -> None:
+        self.go_to("John", 3, 16)
+        copied = self.copied_by("V", "j", "j", "Y")
+        self.assertEqual(len(copied), 1)
+        lines = copied[0].split("\n")
+        self.assertEqual(len(lines), 4)
+        self.assertTrue(lines[0].startswith("16 For God so loved the world"))
+        self.assertTrue(lines[2].startswith("18 He that believeth on him"))
+        self.assertEqual(lines[3], "\u2014 John 3:16\u201318 \u00b7 KJV")
+        self.assertEqual(self.app.message, "yanked John 3:16\u201318")
+        self.assertFalse(self.app.visual_mode)
+
+    def test_Y_without_a_selection_copies_the_verse_without_a_number(self) -> None:
+        self.go_to("John", 11, 35)
+        self.assertEqual(self.copied_by("Y"), ["Jesus wept.\n\u2014 John 11:35 \u00b7 KJV"])
+
+    def test_Y_copies_whole_verses_from_a_character_selection(self) -> None:
+        self.go_to("John", 11, 35)
+        self.app.copy_verse_numbers = False
+        self.app.copy_passage_format = "> {text}\n>\n> {book_abbr} {chapter}:{start_verse}-{end_verse} ({version_name})"
+        copied = self.copied_by("w", "v", "j", "Y")
+        self.assertEqual(len(copied), 1)
+        lines = copied[0].split("\n")
+        self.assertEqual(lines[0], "> Jesus wept.")
+        self.assertTrue(lines[1].startswith("> Then said the Jews"))
+        self.assertEqual(lines[2:], [">", "> John 11:35-36 (King James Version)"])
+        self.assertEqual(self.app.message, "yanked John 11:35\u201336 (whole verses)")
+
+    def test_copy_passage_command(self) -> None:
+        self.go_to("John", 11, 35)
+        with mock.patch("bible_tui.tui.copy_to_clipboard", return_value=True) as copy:
+            self.app.run_command("yank_passage")
+        copy.assert_called_once_with("Jesus wept.\n\u2014 John 11:35 \u00b7 KJV")
 
     def test_chapter_stepping_crosses_books(self) -> None:
         self.go_to("Genesis", 50, 3)
@@ -293,6 +335,21 @@ class SearchFunctionsTest(unittest.TestCase):
         finally:
             store.close()
         self.assertEqual(matches[0].verse.full_reference, "John 11:35")
+
+
+class CopyTemplateTest(unittest.TestCase):
+    def test_passage_reference(self) -> None:
+        self.assertEqual(passage_reference("John", 3, 16), "John 3:16")
+        self.assertEqual(passage_reference("John", 3, 16, 18), "John 3:16\u201318")
+        self.assertEqual(passage_reference("John", 3, 36, 2, end_chapter=4), "John 3:36\u20134:2")
+
+    def test_text_lines_repeat_a_symbol_prefix(self) -> None:
+        lines = ["16 a", "17 b"]
+        self.assertEqual(fill_copy_template("{text}", lines), "16 a\n17 b")
+        self.assertEqual(fill_copy_template("> {text}\n> {ref}", lines, ref="J"), "> 16 a\n> 17 b\n> J")
+        self.assertEqual(fill_copy_template("    {text}", lines), "    16 a\n    17 b")
+        self.assertEqual(fill_copy_template("{ref}: {text}", lines, ref="J"), "J: 16 a\n17 b")  # Words aren't repeated.
+        self.assertEqual(fill_copy_template("{text!r}", lines), "'16 a\\n17 b'")
 
 
 if __name__ == "__main__":

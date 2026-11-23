@@ -53,21 +53,42 @@ class SettingsTest(unittest.TestCase):
     def test_missing_file_gives_defaults(self) -> None:
         self.assertEqual(load_settings(self.path, self.env), Settings())
 
-    def test_yank_format(self) -> None:
-        self.write({"yank_format": "{reference} ({version})\n{text}"})
-        self.assertEqual(load_settings(self.path, self.env).yank_format, "{reference} ({version})\n{text}")
-        for bad, needle in (
-            ("{txt}", "unknown field {txt}"),
-            ("{}", "unknown field {}"),
-            ("{text.__class__}", "unknown field"),
-            ("{text", "not a valid template"),
-            ("{verse:x>q}", "not a valid template"),
-            (5, "must be a string"),
+    def test_copy_formats(self) -> None:
+        self.write({"copy_verse_format": "{reference} ({version})\n{text}", "copy_passage_format": "> {text}", "copy_verse_numbers": False})
+        settings = load_settings(self.path, self.env)
+        self.assertEqual(settings.copy_verse_format, "{reference} ({version})\n{text}")
+        self.assertEqual(settings.copy_passage_format, "> {text}")
+        self.assertFalse(settings.copy_verse_numbers)
+        self.assertEqual(settings.warnings, ())
+        for setting, bad, needle in (
+            ("copy_verse_format", "{txt}", "copy_verse_format has unknown field {txt}"),
+            ("copy_verse_format", "{}", "unknown field {}"),
+            ("copy_verse_format", "{text.__class__}", "unknown field"),
+            ("copy_verse_format", "{text", "not a valid template"),
+            ("copy_verse_format", "{verse:x>q}", "not a valid template"),
+            ("copy_verse_format", "{start_verse}", "unknown field {start_verse}"),
+            ("copy_verse_format", 5, "must be a string"),
+            ("copy_passage_format", "{verse}", "copy_passage_format has unknown field {verse}"),
+            ("copy_passage_format", ["{text}"], "must be a string"),
+            ("copy_verse_numbers", "yes", "must be true or false"),
         ):
-            with self.subTest(bad=bad):
-                self.write({"yank_format": bad})
+            with self.subTest(setting=setting, bad=bad):
+                self.write({setting: bad})
                 with self.assertRaisesRegex(ConfigError, needle):
                     load_settings(self.path, self.env)
+
+    def test_yank_format_still_works_with_a_warning(self) -> None:
+        self.write({"yank_format": "{text} ({reference})"})
+        settings = load_settings(self.path, self.env)
+        self.assertEqual(settings.copy_verse_format, "{text} ({reference})")
+        self.assertIn("yank_format is now called copy_verse_format", settings.warnings[0])
+        self.write({"yank_format": "{txt}"})
+        with self.assertRaisesRegex(ConfigError, "yank_format has unknown field"):
+            load_settings(self.path, self.env)
+        self.write({"yank_format": "{text} ({reference})", "copy_verse_format": "{reference}"})
+        settings = load_settings(self.path, self.env)
+        self.assertEqual(settings.copy_verse_format, "{reference}")
+        self.assertIn("ignoring yank_format", settings.warnings[0])
 
     def test_reads_settings_and_resolves_directories(self) -> None:
         self.write({"default_version": "KJV", "bibles_dirs": ["~/Bibles", "local", "/abs"], "book_order": "alphabetical"})

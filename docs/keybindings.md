@@ -34,7 +34,8 @@ Neovim users get the usual alternatives too. `ctrl+p` (or `?`) lists them all in
 | Next word / previous word / end of word | `w` / `b` / `e` |
 | Select text / select whole verses | `v` / `V` (press again or Esc to cancel) |
 | Copy the selection | `y` |
-| Copy the current verse (add its reference with the `yank_format` setting) | `yy` |
+| Copy the current verse (add its reference with the `copy_verse_format` setting) | `yy` |
+| Copy whole verses (the selection's, or the current one) with the reference and version | `Y` |
 | Mark / unmark the verse (or every verse in a selection) | `m` |
 | List all marks, newest first (Enter jumps to one, `d` or Delete removes it) | `M` or `'` |
 | Highlight the verse (or every verse in a selection) in a color | `c` |

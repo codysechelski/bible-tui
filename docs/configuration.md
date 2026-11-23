@@ -41,7 +41,9 @@ Every key is optional. A missing file means all defaults.
   "show_clock": true,
   "remember_split": false,
   "remember_position": false,
-  "yank_format": "{text}",
+  "copy_verse_format": "{text}",
+  "copy_passage_format": "{text}\n— {reference} · {version}",
+  "copy_verse_numbers": true,
   "check_for_updates": true
 }
 ```
@@ -53,7 +55,9 @@ Every key is optional. A missing file means all defaults.
 | `book_order` | `"bible"` | Starting book order: `"bible"` (canonical, grouped by testament) or `"alphabetical"`. `a` still toggles it in the app. |
 | `nerd_font` | `false` | Set to `true` if your terminal uses a [Nerd Font](https://www.nerdfonts.com/) to get icons: the bookmark for marked verses, search and go-to icons, a check mark for the current version, clipboard and warning icons on messages, and an icon on verses a split pane's version leaves out. Off by default because a terminal program can't detect the font, and a missing glyph shows as an empty box. Without it, plain Unicode symbols (`●`) are used. |
 | `show_clock` | `true` | Show the date and time on the right of the top bar, in your system's date and time format. Set to `false` to hide it. |
-| `yank_format` | `"{text}"` | What `yy` copies for the current verse. See [The `yy` copy format](#the-yy-copy-format). |
+| `copy_verse_format` | `"{text}"` | What `yy` copies for the current verse. See [Copy formats](#copy-formats). This was called `yank_format`, and that name still works. |
+| `copy_passage_format` | `"{text}\n— {reference} · {version}"` | What `Y` copies for the selected verses. See [Copy formats](#copy-formats). |
+| `copy_verse_numbers` | `true` | Start each verse with its number when `Y` copies more than one verse. |
 | `remember_split` | `false` | Set to `true` to reopen a split (`ctrl+w v` or `ctrl+w s`) at launch, with the same orientation and second-pane version. The split is saved in `state.json` as `split` and `split_version`. |
 | `remember_position` | `false` | Set to `true` to reopen at the verse you were on when you quit. It's saved in `state.json` as `position` (book order, chapter, and verse, so it carries across versions). When it's `false` the app opens at the first book's first chapter. |
 | `check_for_updates` | `true` | Look for a newer release at launch. See [Update checks](#update-checks). Set to `false` to never contact the network. |
@@ -88,27 +92,44 @@ To enable them:
 
 The default is `false`. Bible TUI can't reliably detect which font your terminal uses, so it won't turn this on automatically. If icons appear as empty boxes or strange characters, check that your terminal is actually using a Nerd Font, or switch the setting back to `false` to use the standard Unicode symbols instead.
 
-### The `yy` copy format
+### Copy formats
 
-`yy` fills in the `yank_format` template and copies the result. The default, `"{text}"`, copies just the verse
-text. Write a newline as `\n`, and a literal brace as `{{` or `}}`. A visual selection (`v`/`V`, then `y`) is
-always copied as plain text. These fields are available, shown for John 3:16 in the
-KJV:
+Two templates decide what gets copied. Each one is copied as written, with its fields filled in, so put
+Markdown (or anything else) in it if you want that in your notes. Write a newline as `\n`, and a literal brace as
+`{{` or `}}`.
 
-| Field | Example |
-| --- | --- |
-| `{text}` | For God so loved the world, ... |
-| `{reference}` | John 3:16 |
-| `{book}` | John |
-| `{book_abbr}` | John (Gen. for Genesis, Rom. for Romans) |
-| `{chapter}` | 3 |
-| `{verse}` | 16 |
-| `{version}` | KJV |
-| `{version_name}` | King James Version |
+- `copy_verse_format` is for `yy`, which copies the current verse. The default, `"{text}"`, copies just the
+  verse text.
+- `copy_passage_format` is for `Y`, which copies whole verses: every verse in the selection, or the current verse
+  when nothing is selected. The default adds the reference and version on the line below, like
+  `— John 3:16–18 · KJV`. A `v` selection that starts or ends partway through a verse still copies each
+  verse in full, and the message says `(whole verses)`.
 
-In a split, the fields come from the focused pane's version. Some examples:
+To copy just the selected characters with no reference, press `y` instead.
 
-| `yank_format` | Copies |
+These fields are available, shown for John 3:16 (or John 3:16–18) in the KJV:
+
+| Field | Example | In |
+| --- | --- | --- |
+| `{text}` | For God so loved the world, ... | both |
+| `{reference}` | John 3:16, or John 3:16–18 for a passage | both |
+| `{book}` | John | both |
+| `{book_abbr}` | John (Gen. for Genesis, Rom. for Romans) | both |
+| `{chapter}` | 3 | both |
+| `{verse}` | 16 | `copy_verse_format` |
+| `{start_verse}` / `{end_verse}` | 16 / 18 | `copy_passage_format` |
+| `{version}` | KJV | both |
+| `{version_name}` | King James Version | both |
+
+In a passage, `{text}` has one verse per line, each starting with its number (`16 For God so loved...`) unless
+`copy_verse_numbers` is `false`. A single verse gets no number, since the reference already has it. When `{text}`
+has only spaces and symbols before it on its line, every verse line starts with them too, so `"> {text}"`
+quotes the whole passage in Markdown and `"    {text}"` indents every verse. In a split, the fields come from
+the focused pane's version, and a verse that version doesn't have is left out of `{text}`.
+
+Some examples:
+
+| `copy_verse_format` | Copies |
 | --- | --- |
 | `"{text}"` (default) | just the text |
 | `"{text}\n\n{reference}"` | the text, a blank line, then `John 3:16` |
@@ -116,7 +137,14 @@ In a split, the fields come from the focused pane's version. Some examples:
 | `"{reference} {version}\n{text}"` | `John 3:16 KJV` on the first line, the text on the next |
 | `"{text} —{book_abbr} {chapter}:{verse}"` | `For God so loved... —John 3:16` |
 
-An unknown field such as `{txt}` stops the app at startup with a message that lists the fields.
+| `copy_passage_format` | Copies |
+| --- | --- |
+| `"{text}\n— {reference} · {version}"` (default) | the verses, then `— John 3:16–18 · KJV` |
+| `"> {text}\n>\n> — {reference} ({version})"` | a Markdown quote of the verses, ending with `> — John 3:16–18 (KJV)` |
+| `"**{reference}** ({version_name})\n{text}"` | `**John 3:16–18** (King James Version)`, then the verses |
+
+An unknown field such as `{txt}`, or `{verse}` in `copy_passage_format`, stops the app at startup with a message
+that lists the fields.
 
 ### Update checks
 
