@@ -32,8 +32,8 @@ and Esc, and Vim users get the keys they already know. Each page below has a sho
 
 - **[Marks](marks.md)**: bookmark verses with `m` and jump back to them from a list.
 - **[Highlights](highlights.md)**: highlight verses in six colors with `c`, with a list of every highlight.
-- **[Copying verses](copying.md)**: copy a verse with `yy` or a selection with `y`, with an optional format that
-  adds the reference.
+- **[Copying verses](copying.md)**: copy a verse with `yy`, a selection with `y`, or a passage with its reference
+  and version with `Y`, in a format you choose (Markdown included).
 
 ## Your data
 

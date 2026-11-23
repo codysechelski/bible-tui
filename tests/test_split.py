@@ -4,6 +4,7 @@ import curses
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from bible_tui.cli import remembered_split
@@ -152,6 +153,16 @@ class SplitTest(unittest.TestCase):
         self.assertFalse(self.app.visual_mode)  # A selection belongs to one pane.
         self.press("V")
         self.assertIn("whosoever believeth in him", self.app.selected_text())  # KJV wording
+
+    def test_passage_copy_skips_a_verse_the_focused_version_lacks(self) -> None:
+        self.go_to("Matthew", 17, 20)
+        self.split_with_asv()
+        copied: list[str] = []
+        with mock.patch("bible_tui.tui.copy_to_clipboard", side_effect=lambda text: copied.append(text) or True):
+            self.press("V", "j", "j", "Y")
+        lines = copied[0].split("\n")
+        self.assertEqual([line.split(" ")[0] for line in lines[:-1]], ["20", "22"])  # The ASV has no 17:21.
+        self.assertEqual(lines[-1], "\u2014 Matthew 17:20\u201322 \u00b7 ASV")
 
     def test_search_looks_in_the_focused_pane(self) -> None:
         self.go_to("John", 3, 16)

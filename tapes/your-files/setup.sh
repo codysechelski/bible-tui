@@ -11,7 +11,7 @@ cat > "$stowed/config.json" <<'JSON'
   "book_order": "bible",
   "nerd_font": true,
   "show_clock": false,
-  "yank_format": "{text}\n\n  ~ {reference} {version}"
+  "copy_verse_format": "{text}\n\n  ~ {reference} {version}"
 }
 JSON
 rm -f "$HOME/.config/bible-tui/config.json"

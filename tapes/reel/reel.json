@@ -100,10 +100,10 @@
       "title": "Copy verses",
       "description": "Copy a phrase, a verse, or a whole passage to paste anywhere, with the reference if you like.",
       "caption": "Paste scripture anywhere.",
-      "bullets": ["yy copies a verse", "Your own format with the reference"],
+      "bullets": ["yy copies a verse, Y a passage", "Your own format with the reference"],
       "video": "yanking/videos/yanking-with-keys.mp4",
-      "start": 10,
-      "duration": 39,
+      "start": 3.5,
+      "duration": 33,
       "speed": 1.8
     }
   ],

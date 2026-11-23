@@ -21,7 +21,7 @@ from bible_tui.paths import STATE_FILE_NAME, expand_path
 BOOK_ORDERS = ("bible", "alphabetical")
 
 # ``yy`` copies the current verse through this template. Fields, with John 3:16 in the KJV as the example:
-YANK_FORMAT_FIELDS = {
+VERSE_FORMAT_FIELDS = {
     "text": "For God so loved the world...",
     "reference": "John 3:16",
     "book": "John",
@@ -31,7 +31,21 @@ YANK_FORMAT_FIELDS = {
     "version": "KJV",
     "version_name": "King James Version",
 }
-DEFAULT_YANK_FORMAT = "{text}"
+DEFAULT_VERSE_FORMAT = "{text}"
+
+# ``Y`` copies whole verses through this template. Fields, with John 3:16-18 in the KJV as the example:
+PASSAGE_FORMAT_FIELDS = {
+    "text": "16 For God so loved the world...\n17 For God sent not his Son...",
+    "reference": "John 3:16\u201318",
+    "book": "John",
+    "book_abbr": "John",
+    "chapter": 3,
+    "start_verse": 16,
+    "end_verse": 18,
+    "version": "KJV",
+    "version_name": "King James Version",
+}
+DEFAULT_PASSAGE_FORMAT = "{text}\n\u2014 {reference} \u00b7 {version}"
 
 
 class ConfigError(Exception):
@@ -47,7 +61,9 @@ class Settings:
     show_clock: bool = True
     remember_split: bool = False
     remember_position: bool = False
-    yank_format: str = DEFAULT_YANK_FORMAT
+    copy_verse_format: str = DEFAULT_VERSE_FORMAT
+    copy_passage_format: str = DEFAULT_PASSAGE_FORMAT
+    copy_verse_numbers: bool = True
     check_for_updates: bool = True
     warnings: tuple[str, ...] = field(default=(), compare=False)
 
@@ -85,7 +101,7 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"{path}: expected a JSON object at the top level")
 
     warnings: list[str] = []
-    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "show_clock", "remember_split", "remember_position", "yank_format", "check_for_updates"}
+    known = {"default_version", "bibles_dirs", "book_order", "nerd_font", "show_clock", "remember_split", "remember_position", "copy_verse_format", "copy_passage_format", "copy_verse_numbers", "yank_format", "check_for_updates"}
     for key in sorted(set(data) - known):
         warnings.append(f"{path}: ignoring unknown setting {key!r}")
 
@@ -124,10 +140,23 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
     if not isinstance(remember_position, bool):
         raise ConfigError(f"{path}: remember_position must be true or false")
 
-    yank_format = data.get("yank_format", DEFAULT_YANK_FORMAT)
-    if not isinstance(yank_format, str):
-        raise ConfigError(f"{path}: yank_format must be a string")
-    check_yank_format(path, yank_format)
+    # ``yank_format`` was the first name of ``copy_verse_format``; it still works.
+    verse_key = "copy_verse_format"
+    if "yank_format" in data:
+        if verse_key in data:
+            warnings.append(f"{path}: ignoring yank_format, because copy_verse_format is set")
+        else:
+            verse_key = "yank_format"
+            warnings.append(f"{path}: yank_format is now called copy_verse_format; please rename it")
+    copy_verse_format = data.get(verse_key, DEFAULT_VERSE_FORMAT)
+    check_template(path, verse_key, copy_verse_format, VERSE_FORMAT_FIELDS)
+
+    copy_passage_format = data.get("copy_passage_format", DEFAULT_PASSAGE_FORMAT)
+    check_template(path, "copy_passage_format", copy_passage_format, PASSAGE_FORMAT_FIELDS)
+
+    copy_verse_numbers = data.get("copy_verse_numbers", True)
+    if not isinstance(copy_verse_numbers, bool):
+        raise ConfigError(f"{path}: copy_verse_numbers must be true or false")
 
     check_for_updates = data.get("check_for_updates", True)
     if not isinstance(check_for_updates, bool):
@@ -141,27 +170,31 @@ def load_settings(path: Path, env: Mapping[str, str] | None = None) -> Settings:
         show_clock=show_clock,
         remember_split=remember_split,
         remember_position=remember_position,
-        yank_format=yank_format,
+        copy_verse_format=copy_verse_format,
+        copy_passage_format=copy_passage_format,
+        copy_verse_numbers=copy_verse_numbers,
         check_for_updates=check_for_updates,
         warnings=tuple(warnings),
     )
 
 
-def check_yank_format(path: Path, template: str) -> None:
-    """Only the plain ``{field}`` names in ``YANK_FORMAT_FIELDS`` are allowed (``{{`` and ``}}`` for braces)."""
-    fields = ", ".join(f"{{{name}}}" for name in YANK_FORMAT_FIELDS)
+def check_template(path: Path, setting: str, template: object, fields: Mapping[str, object]) -> None:
+    """Only the plain ``{field}`` names in ``fields`` are allowed (``{{`` and ``}}`` for braces)."""
+    if not isinstance(template, str):
+        raise ConfigError(f"{path}: {setting} must be a string")
+    available = ", ".join(f"{{{name}}}" for name in fields)
     try:
         parsed = list(string.Formatter().parse(template))
     except ValueError as error:
-        raise ConfigError(f"{path}: yank_format is not a valid template ({error}); use {{{{ and }}}} for braces") from None
+        raise ConfigError(f"{path}: {setting} is not a valid template ({error}); use {{{{ and }}}} for braces") from None
     for _, name, _, _ in parsed:
-        if name is not None and name not in YANK_FORMAT_FIELDS:
+        if name is not None and name not in fields:
             shown = f"{{{name}}}" if name else "{}"
-            raise ConfigError(f"{path}: yank_format has unknown field {shown} (available: {fields})")
+            raise ConfigError(f"{path}: {setting} has unknown field {shown} (available: {available})")
     try:
-        template.format(**YANK_FORMAT_FIELDS)
+        template.format(**fields)
     except (ValueError, TypeError) as error:
-        raise ConfigError(f"{path}: yank_format is not a valid template ({error})") from None
+        raise ConfigError(f"{path}: {setting} is not a valid template ({error})") from None
 
 
 def load_state(home: Path) -> dict[str, object]:

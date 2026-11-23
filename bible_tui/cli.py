@@ -250,7 +250,9 @@ def run_tui(
             highlights=highlights,
             nerd_font=settings.nerd_font,
             show_clock=settings.show_clock,
-            yank_format=settings.yank_format,
+            copy_verse_format=settings.copy_verse_format,
+            copy_passage_format=settings.copy_passage_format,
+            copy_verse_numbers=settings.copy_verse_numbers,
             update_check=update_check,
             install=install,
         )

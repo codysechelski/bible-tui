@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from bible_tui import __version__
-from bible_tui.config import DEFAULT_YANK_FORMAT
+from bible_tui.config import DEFAULT_PASSAGE_FORMAT, DEFAULT_VERSE_FORMAT
 from bible_tui.highlights import HIGHLIGHT_COLORS, HighlightError, HighlightStore
 from bible_tui.marks import MarkError, MarkStore, VerseKey
 from bible_tui.store import BOOK_ABBREVIATIONS, BibleStore, BibleVerse, Book, Verse
@@ -265,6 +265,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[Command, ...]], ...] = (
             Command("select verses", "V", "visual_line_mode"),
             Command("copy selection", "y", "yank_selection"),
             Command("copy verse", "yy", "yank_verse"),
+            Command("copy passage with reference", "Y", "yank_passage"),
         ),
     ),
     (
@@ -376,7 +377,9 @@ class BibleTui:
         highlights: HighlightStore | None = None,
         nerd_font: bool = False,
         show_clock: bool = True,
-        yank_format: str = DEFAULT_YANK_FORMAT,
+        copy_verse_format: str = DEFAULT_VERSE_FORMAT,
+        copy_passage_format: str = DEFAULT_PASSAGE_FORMAT,
+        copy_verse_numbers: bool = True,
         update_check: UpdateCheck | None = None,
         install: Install | None = None,
     ) -> None:
@@ -384,7 +387,9 @@ class BibleTui:
         self._message = ""
         self.message_kind = MESSAGE_INFO
         self.message_until = 0.0  # time.monotonic() when the footer message goes away
-        self.yank_format = yank_format
+        self.copy_verse_format = copy_verse_format
+        self.copy_passage_format = copy_passage_format
+        self.copy_verse_numbers = copy_verse_numbers
         self.store = store
         self.version = version
         self.versions: tuple[BibleVersion, ...] = tuple(versions) or (version,)
@@ -684,6 +689,10 @@ class BibleTui:
         if key == ord("y") and self.focus == FOCUS_TEXT and self.verses:
             self.handle_yank_key()
             return True
+        if key == ord("Y") and self.focus == FOCUS_TEXT and self.verses:
+            self.pending_y = False
+            self.yank_passage()
+            return True
         if key == ord("m"):
             self.pending_y = False
             self.toggle_mark()
@@ -917,6 +926,11 @@ class BibleTui:
         elif action == "yank_verse":
             if self.focus == FOCUS_TEXT and self.verses:
                 self.yank_current_verse()
+            else:
+                self.message = "no verse selected"
+        elif action == "yank_passage":
+            if self.focus == FOCUS_TEXT and self.verses:
+                self.yank_passage()
             else:
                 self.message = "no verse selected"
         return True
@@ -2248,29 +2262,67 @@ class BibleTui:
         self.visual_anchor = None
 
     def yank_current_verse(self) -> None:
-        """``yy``: the verse through the ``yank_format`` template (just the text by default)."""
+        """``yy``: the verse through the ``copy_verse_format`` template (just the text by default)."""
         verse = self.active_verses[self.verse_cursor]
         if isinstance(verse, MissingVerse):
             self.message = f"{self.location_label()} is not in {self.pane_version(self.active_pane).name}"
             return
-        self.yank_to_clipboard(self.format_yank(verse), "verse")
+        self.yank_to_clipboard(self.format_copy_verse(verse), "verse")
 
-    def format_yank(self, verse: Verse) -> str:
-        """Fill ``yank_format`` from the focused pane, so its version and book name are used."""
+    def copy_fields(self) -> dict[str, object]:
+        """The template fields shared by both copy formats, from the focused pane's version and book."""
         version = self.pane_version(self.active_pane)
         book = self.selected_book
         if self.active_pane == 1 and self.split_pane is not None:
             book = self.split_pane.books.get(book.sort_order, book)
-        reference = f"{book.name} {self.selected_chapter}:{verse.number}"
-        return self.yank_format.format(
-            text=verse.text,
+        return {
+            "book": book.name,
+            "book_abbr": BOOK_ABBREVIATIONS.get(book.name, book.name),
+            "chapter": self.selected_chapter,
+            "version": version.abbreviation,
+            "version_name": version.name,
+        }
+
+    def format_copy_verse(self, verse: Verse) -> str:
+        fields = self.copy_fields()
+        reference = passage_reference(fields["book"], self.selected_chapter, verse.number)
+        return fill_copy_template(
+            self.copy_verse_format, [verse.text], reference=reference, verse=verse.number, **fields
+        )
+
+    def yank_passage(self) -> None:
+        """``Y``: whole verses (the selection's, or the current one) through ``copy_passage_format``.
+
+        Like Vim's ``Y``, a character selection copies every verse it touches, never part of one.
+        """
+        selection = self.visual_selection_bounds()
+        partial = False
+        if selection is None:
+            first, last = self.verse_cursor, self.verse_cursor
+        else:
+            (first, start_col), (last, end_col) = selection
+            partial = start_col > 0 or end_col < len(self.active_verses[last].text) - 1
+        self.exit_visual_mode()
+        verses = [verse for verse in self.active_verses[first : last + 1] if not isinstance(verse, MissingVerse)]
+        if not verses:
+            self.message = f"{self.location_label()} is not in {self.pane_version(self.active_pane).name}"
+            return
+        text = self.format_copy_passage(verses)
+        reference = passage_reference(self.selected_book.name, self.selected_chapter, verses[0].number, verses[-1].number)
+        self.yank_to_clipboard(text, f"{reference} (whole verses)" if partial else reference)
+
+    def format_copy_passage(self, verses: Sequence[Verse]) -> str:
+        fields = self.copy_fields()
+        numbered = self.copy_verse_numbers and len(verses) > 1
+        lines = [f"{verse.number} {verse.text}" if numbered else verse.text for verse in verses]
+        reference = passage_reference(fields["book"], self.selected_chapter, verses[0].number, verses[-1].number)
+        return fill_copy_template(
+            self.copy_passage_format,
+            lines,
             reference=reference,
-            book=book.name,
-            book_abbr=BOOK_ABBREVIATIONS.get(book.name, book.name),
-            chapter=self.selected_chapter,
-            verse=verse.number,
-            version=version.abbreviation,
-            version_name=version.name,
+            start_verse=verses[0].number,
+            end_verse=verses[-1].number,
+            **fields,
         )
 
     def yank_to_clipboard(self, text: str, label: str) -> None:
@@ -3741,6 +3793,42 @@ class BibleTui:
         if self.verses:
             return f"{self.selected_book.name} {self.selected_chapter}:{self.verses[self.verse_cursor].number}"
         return f"{self.selected_book.name} {self.selected_chapter}"
+
+
+def passage_reference(
+    book: str, chapter: int, start_verse: int, end_verse: int | None = None, end_chapter: int | None = None
+) -> str:
+    """``John 3:16``, ``John 3:16–18``, or across chapters ``John 3:36–4:2`` (with an en dash)."""
+    end_chapter = chapter if end_chapter is None else end_chapter
+    end_verse = start_verse if end_verse is None else end_verse
+    reference = f"{book} {chapter}:{start_verse}"
+    if end_chapter != chapter:
+        return f"{reference}–{end_chapter}:{end_verse}"
+    if end_verse != start_verse:
+        return f"{reference}–{end_verse}"
+    return reference
+
+
+COPY_TEXT_MARKER = "\0text\0"
+
+
+def fill_copy_template(template: str, lines: Sequence[str], **fields: object) -> str:
+    """Fill a copy template, with ``lines`` (one per verse) as ``{text}``.
+
+    When ``{text}`` has only spaces and symbols before it on its line, such as ``> `` or an indent, every
+    verse line starts with them too, so ``"> {text}"`` quotes the whole passage in Markdown.
+    """
+    filled = template.format(text=COPY_TEXT_MARKER, **fields)
+    if COPY_TEXT_MARKER not in filled:  # A format spec or conversion changed the marker; skip the prefixes.
+        return template.format(text="\n".join(lines), **fields)
+    out: list[str] = []
+    for line in filled.split("\n"):
+        if COPY_TEXT_MARKER in line:
+            prefix = line[: line.index(COPY_TEXT_MARKER)]
+            joiner = "\n" + (prefix if not any(char.isalnum() for char in prefix) else "")
+            line = line.replace(COPY_TEXT_MARKER, joiner.join(lines))
+        out.append(line)
+    return "\n".join(out)
 
 
 CLIPBOARD_COMMANDS: tuple[tuple[str, ...], ...] = (
