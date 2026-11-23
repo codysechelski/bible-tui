@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.12.0 (2026-11-23)
+
+### Features
+
+- Copy verse ranges with a combined reference (#27)
+  ([#31](https://github.com/codysechelski/bible-tui/pull/31),
+  [`8cd111f`](https://github.com/codysechelski/bible-tui/commit/8cd111ff73e2c28c30f6521ec405b2cfe0bfe076))
+
+
 ## v0.11.0 (2026-11-21)
 
 ### Chores
