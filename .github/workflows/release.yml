@@ -73,7 +73,7 @@ jobs:
       - name: Tests
         run: python -m unittest discover -s tests -t .
 
-  # The one check the main ruleset requires: it passes when the matrix passed or was skipped for a docs-only
+  # The single pass/fail check for a pull request: it passes when the matrix passed or was skipped for a docs-only
   # change, and fails otherwise. Its name stays the same when the matrix changes.
   tests:
     needs: [changes, test]
