@@ -106,6 +106,11 @@ No linter or formatter is installed.
   a GitHub Release. When a release was made, the `build` job builds the sdist and wheel from the new tag and
   the `publish` job uploads them to PyPI with trusted publishing (the `pypi` environment; no stored token).
   A failed publish can be retried with "Re-run failed jobs" without cutting another release.
+  After publishing, the `homebrew` job commits the new sdist's url and sha256 to `Formula/bible-tui.rb` in
+  `codysechelski/homebrew-tap` and closes any open `bump-bible-tui-*` pull requests there. It needs the
+  `HOMEBREW_TAP_TOKEN` secret (a fine-grained token for the tap with Contents and Pull requests read/write) and
+  fails loudly without it. The tap's own daily `brew bump` is only a fallback: it opens pull requests, and an
+  unmerged one stops it from opening newer ones.
 - The README is also the PyPI page, and PyPI keeps each release's copy for good. Its images and links must be
   absolute `https://raw.githubusercontent.com/codysechelski/bible-tui/main/...` and
   `https://github.com/codysechelski/bible-tui/blob/main/...` URLs: the `build` job rewrites `main` to the

@@ -164,3 +164,64 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+
+  # Point the Homebrew tap's formula at the new sdist. The tap's daily `brew bump` only opens a pull request,
+  # and an unmerged one stops it from opening newer ones, so this commits to the tap directly and closes any
+  # leftover bump pull requests. HOMEBREW_TAP_TOKEN is a fine-grained token for codysechelski/homebrew-tap
+  # with read and write access to Contents and Pull requests. Like publish, "Re-run failed jobs" retries it.
+  homebrew:
+    needs: [release, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
+      TAP: codysechelski/homebrew-tap
+    steps:
+      - name: Check for the tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::error::The HOMEBREW_TAP_TOKEN secret is missing, so the Homebrew tap can't be updated."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.TAP }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Update the formula
+        run: |
+          version="${TAG#v}"
+          # PyPI's JSON API can take a minute or two to list a new upload.
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            sdist="$(curl -fsS "https://pypi.org/pypi/bible-tui/${version}/json" |
+              jq -r '.urls[] | select(.packagetype == "sdist") | "\(.url) \(.digests.sha256)"')" && [ -n "$sdist" ] && break
+            sleep 30
+          done
+          [ -n "$sdist" ] || { echo "::error::PyPI doesn't list a bible-tui ${version} sdist."; exit 1; }
+          read -r url sha256 <<< "$sdist"
+          formula=tap/Formula/bible-tui.rb
+          sed -i -E "s#^  url \".*\"#  url \"${url}\"#; s#^  sha256 \".*\"#  sha256 \"${sha256}\"#" "$formula"
+          grep -qxF "  url \"${url}\"" "$formula"
+          grep -qxF "  sha256 \"${sha256}\"" "$formula"
+          cd tap
+          if git diff --quiet; then
+            echo "The formula is already at ${version}."
+            exit 0
+          fi
+          git diff
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -am "bible-tui ${version}"
+          git push
+      - name: Close older bump pull requests
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          gh pr list -R "$TAP" --state open --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("bump-bible-tui-")) | .number' |
+          while read -r number; do
+            gh pr close "$number" -R "$TAP" --delete-branch \
+              --comment "Superseded by bible-tui ${TAG#v}, which the bible-tui release workflow committed to main."
+          done
